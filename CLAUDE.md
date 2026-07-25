@@ -69,7 +69,8 @@ Real money, and the user's own. Treat overspending as a bug, not a tradeoff.
 
 - **Python 3.12** — pinned `>=3.12,<3.13`. The system interpreter is 3.14.3; `evalplus` and the ONNX embedding stack have no wheels for it. Do not "helpfully" relax this pin.
 - **Never hardcode a model name.** The roster lives in `config/models.yaml`, validated against OpenRouter's live `/models`, every row carrying a snapshot date. Model names in this repo's prose are *candidates*, not confirmed facts — the open-weight landscape moves every 6–8 weeks.
-- **Never run generated code outside the Docker sandbox.** It is untrusted and will eventually contain infinite loops, `os.system`, or filesystem writes.
+- **Never grade generated code outside `carr/execute/verify.py`.** It wraps evalplus's `untrusted_check`: subprocess isolation, timeouts, and `reliability_guard`. Do not hand-roll grading — `atol` float comparison and MBPP special oracles make pass/fail more than `==`, and a mislabel corrupts every downstream number invisibly.
+- **Never remove `EVALPLUS_MAX_MEMORY_BYTES=-1`** from `verify.py` without reading the comment above it. On macOS its absence silently makes every solution fail as a "timeout".
 - **Store `raw_response` verbatim.** Code-extraction logic has bugs; keeping raw responses means re-grading offline for free instead of re-buying generations.
 - **`.env` is never committed.** It is gitignored — keep it that way.
 - **`data/carr.sqlite` is the scientific asset.** It costs real money to regenerate. Gitignored, but tell the user to back it up separately.
