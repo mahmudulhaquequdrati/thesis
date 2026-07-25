@@ -1,0 +1,60 @@
+# Experiment parameters. The roster lives in models.yaml; this is everything
+# else that must not be hardcoded or silently changed between runs.
+#
+# The budget block is not documentation -- carr/runner.py reads it and REFUSES
+# to make a call that could push total spend past `abort_at_usd`. A cap that
+# warns is not a cap.
+
+budget:
+  # The ceiling from CLAUDE.md. Never raise this without the user saying so.
+  max_spend_usd: 50.00
+  # What is actually on the OpenRouter account. The real constraint, and far
+  # tighter than the ceiling. An unloaded balance is the last line of defence
+  # against a runaway loop, so the account is deliberately not topped to $50.
+  loaded_usd: 4.00
+  # Where the runner stops. Below `loaded_usd` so a mis-estimate cannot leave
+  # the account empty mid-grid.
+  abort_at_usd: 3.60
+  # Printed as a warning, does not stop anything.
+  warn_at_usd: 2.00
+
+generation:
+  # docs/data-spec.md section 2. Changing any of these invalidates comparisons
+  # against rows already bought, because request_hash does not cover them.
+  temperature: 0.0
+  n: 1
+  # Per-call ceiling on completion tokens. This is a cost control, not a
+  # quality setting: a truncated answer is a legitimate failure that cost a
+  # known, bounded amount. It is also what the worst-case cap is computed from.
+  max_tokens: 16000
+  # A failed call is recorded and skipped, not retried in place -- a retry loop
+  # is how a cost cap gets defeated. Re-running the script picks it up instead.
+  retries: 0
+
+sampling:
+  # Fixed everywhere: sampling, splits, bootstrap. Reproducibility is graded.
+  seed: 20260726
+
+  # The pilot's job is NOT to produce results. It is to measure two numbers
+  # that the whole budget depends on and that no amount of estimating can
+  # supply: mean thinking tokens on HARD problems, and the saturation rate.
+  #
+  # Stratified, because the first real cell (HumanEval/0) was solved by all 10
+  # configs. A pilot over easy problems would report ~100% everywhere and
+  # teach us nothing.
+  pilot:
+    strata:
+      humaneval_plus: 3
+      mbpp_plus: 3
+      livecodebench_easy: 2
+      livecodebench_medium: 3
+      livecodebench_hard: 4
+
+  # The full grid. Final size is set BY the pilot, not before it.
+  grid:
+    strata:
+      humaneval_plus: 60
+      mbpp_plus: 90
+      livecodebench_easy: 30
+      livecodebench_medium: 50
+      livecodebench_hard: 70

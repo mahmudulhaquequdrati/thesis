@@ -49,7 +49,22 @@ keeps RQ4 from degenerating into "always use the cheapest config". ⚠️ It is
 **not** a contamination control here — it stopped updating in 2025 and every
 model on the roster is a 2026 release. See THESIS.md §9.
 
-## Buy a row (this spends real money)
+## Run the pilot (this spends real money)
+
+```bash
+uv run python scripts/pilot.py --dry-run    # free: the sample and the bill
+uv run python scripts/pilot.py --yes        # ~$0.29 expected
+```
+
+15 problems stratified across benchmark and difficulty × 10 configs. Its job is
+to measure the two numbers that decide the grid's size: mean thinking tokens on
+**hard** problems, and the saturation rate.
+
+The cap in `config/experiment.yaml` **aborts before spending** — it refuses any
+call whose worst case (`max_tokens` × output price) would push *lifetime* spend
+past `abort_at_usd`. Interrupt it and re-run; bought cells are skipped for free.
+
+## Buy a single row
 
 ```bash
 uv run python scripts/run_one.py --all --dry-run          # free; shows the bill first

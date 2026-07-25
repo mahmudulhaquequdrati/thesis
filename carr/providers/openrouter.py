@@ -29,6 +29,7 @@ blocking per call would add hours.
 
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -56,7 +57,34 @@ class OpenRouterProvider:
             )
         from openai import OpenAI
 
+        self._key = key
+        self._base_url = base_url
         self._client = OpenAI(api_key=key, base_url=base_url, timeout=timeout)
+
+    def fetch_cost(self, generation_id: str) -> float | None:
+        """Ground-truth `total_cost` for one generation, or None if unavailable.
+
+        Free -- this is a lookup, not a generation. Returns None rather than
+        raising: the record 404s until it settles (~10s), and a missing cost is
+        a reconciliation gap, not a reason to lose a run. `cost_computed_usd`
+        remains the fallback.
+
+        Not in the OpenAI schema, so it is a plain GET rather than an SDK call.
+        """
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            f"{self._base_url}/generation?id={generation_id}",
+            headers={"Authorization": f"Bearer {self._key}"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read()).get("data") or {}
+        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+            return None
+        cost = data.get("total_cost")
+        return float(cost) if cost is not None else None
 
     def complete(self, prompt: str, config, *, problem_id: str,
                  max_tokens: int = DEFAULT_MAX_TOKENS,

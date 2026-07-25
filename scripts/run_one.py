@@ -111,7 +111,8 @@ def main() -> None:
 
     todo, skipped = [], 0
     for cfg in configs:
-        h = db.request_hash(cfg.model_slug, cfg.effort_label, prompt, cfg.params)
+        h = db.request_hash(cfg.model_slug, cfg.effort_label, prompt,
+                            cfg.params, args.problem)
         if db.has_generation(conn, h):
             skipped += 1
             continue

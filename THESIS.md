@@ -14,12 +14,13 @@
 | | |
 |---|---|
 | **Stage** | **Week 1 COMPLETE.** Days 1–5 ✅. Real generations flowing end to end: problem → OpenRouter → extract → grade → row. |
-| **Next action** | **Week 2 — the pilot** (needs your go-ahead; ~$0.30). **Nothing has been spent since Day 4.** Needs `carr/runner.py` (many problems, aborting cost cap, batched cost reconciliation) and `config/experiment.yaml`. Sample must be **difficulty-spread, not the first N problems** — see the saturation finding below. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
+| **Next action** | **Run the pilot — needs your go-ahead.** `uv run python scripts/pilot.py --dry-run` prices it free: **expected $0.29**, worst case $2.37, cap $3.60. Runner, cap, stratified sampling and cost reconciliation are all built and tested. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
 | **Spend to date** | **$0.0114** of **$4.00 loaded** ($50 ceiling) |
 | **Rows in dataset** | **10 real of ~2,600** (~300 problems × 10 configs — final count set by the pilot). Problem pool: **717 loaded** (HumanEval+ 164, MBPP+ 378, LiveCodeBench 175) + 10 configs |
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
+- `2026-07-26` — **Runner, cost cap and pilot built. $0 spent.** `config/experiment.yaml` (the `$50`/`$4.00`/`$3.60` caps finally have a home), `carr/experiment.py` (stratified sampling, fixed seed), `carr/runner.py` (the paid loop) and `scripts/pilot.py`. **The cap aborts before spending, on worst case, against lifetime DB spend** — 16 tests in `tests/test_runner.py` prove it, including that a zero-headroom cap buys literally nothing and that a mid-run stop is resumable. Pilot priced at **expected $0.29 / worst case $2.37** over 15 stratified problems × 10 configs. ⚠️ **Latent bug found and fixed: `request_hash` did not include `problem_id`,** so two problems sharing a prompt would collide and the second would silently get no row, no result and no routing label. Zero collisions in the current 717-problem pool, so it was invisible rather than harmful — now closed, with the 10 existing rows migrated in place rather than re-bought.
 - `2026-07-26` — **LiveCodeBench loaded — the hard tier exists. $0 spent.** `carr/benchmarks/livecodebench.py` (download + cache + decode) and a second grading path in `verify.py`, because LCB shares nothing with evalplus: 112 problems are stdin→stdout programs, 63 are methods on a `Solution` class, and **LCB ships no canonical solutions at all**. Pool is now **717 problems**; 80 of the 175 LCB problems are `hard`. ⚠️ **Two findings.** (1) **LCB is not contamination-controlled for us** — its newest problem is 2025-04-06, the dataset stopped updating 2025-06-05, and every model on the roster is a 2026 release. It enters as a *difficulty* tier only; `release_date` is stored so exposure can be reported. The proposal's contamination claim is now wrong (§14). (2) With no canonical solutions there is nothing to run through the grader as known-good, so `tests/test_verify_lcb.py` uses **hand-written reference solutions** for both styles — the only thing standing between us and an LCB version of the macOS `setrlimit` bug. 11 LCB tests pass; the references score 43/43 and 34/34.
 - `2026-07-26` — **Day 4 ✅ — Week 1 complete. First real generations, $0.0103.** `carr/providers/openrouter.py` + `scripts/run_one.py` (hard cap on *worst-case* spend that aborts before sending; dedup; cheapest-expected-first). One problem × all 10 configs. **Three findings, two of them serious.** (1) ⚠️ **Saturation is real and immediate: 10/10 configs solved `HumanEval/0`, including every no-reasoning config.** That is the risk §11 names as most likely to invalidate the headline result, visible on the very first cell. The pilot sample must be difficulty-spread, and the LiveCodeBench hard tier moves from "nice to have" to load-bearing. (2) **Thinking tokens measured far below assumption: mean 963 (range 278–1,915) against the 3,500 guess.** Grid re-prices from $3.66 to **$1.76** — but this is one easy problem, not a pilot; hard problems will pull it up. (3) **58× cost spread for an identical outcome** — $0.000081 (flash·off) to $0.004673 (kimi·high), all PASS. That spread is the thesis. Routing target for this problem: `deepseek-v4-flash | off`, as §9 predicted.
 - `2026-07-26` — **Kimi given both effort levels; roster 9 → 10 configs (+$0.10).** `subset_only` cuts *problems*, never the effort axis. With one effort kimi had a single point on the cost-accuracy plane, no measurable thinking delta, and RQ5 would have tested transfer along the model axis only — not the effort axis, which is what the thesis is about. Also corrected a pre-existing count error: the grid is **~2,600 rows**, not 2,700 (8 full configs × 300 + 2 held-out × 100); the old figure assumed kimi ran the full 300, contradicting `subset_only`.
@@ -128,8 +129,8 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 ### Weeks 2–12
 | | Week | Milestone | Spend |
 |---|---|---|---|
-| ⬜ | 2 | Widen harness: all loaders, all configs, resumability, cost cap, echo tests | $0 |
-| ⬜ | 2 | Pilot: **difficulty-spread** problems × all configs → real costs + **saturation check** (already firing — see §11) | ~$0.30 |
+| ✅ | 2 | Widen harness: all loaders, all configs, resumability, cost cap | **Done, $0.** `carr/runner.py` + `config/experiment.yaml`; 16 tests on the cap alone |
+| ⬜ | 2 | Pilot: 15 **difficulty-spread** problems × 10 configs → thinking tokens on HARD problems + **saturation rate** | **~$0.29** (worst case $2.37) |
 | ⬜ | 3–4 | **Full grid run** (cheapest configs first) | $18–28 |
 | ⬜ | 5 | RQ1–RQ3: Pareto frontier, convex hull, CPC/TPC with CIs | $0 |
 | ⬜ | 6–7 | CARR: features, oracle, rules, k-NN, 4 scenarios, gap decomposition | $0 |
@@ -209,14 +210,15 @@ thesis/
 ├── .env                     ✅ # OPENROUTER_API_KEY (gitignored)
 ├── config/
 │   ├── models.yaml          ✅ # roster: slug, family, effort params, prices, snapshot date
-│   ├── benchmarks.yaml         # sample sizes, seeds, LCB release window
-│   └── experiment.yaml         # grid, temperature, max_tokens, HARD COST CAP
+│   └── experiment.yaml      ✅ # HARD COST CAP, temperature, max_tokens, strata, seed
 ├── carr/
 │   ├── db.py                ✅ # schema + idempotent upsert + read helpers
 │   ├── providers/
 │   │   ├── base.py          ✅ # the Provider contract: Generation, Usage
 │   │   └── openrouter.py    ✅ # the real adapter. Every call costs money
 │   ├── effort.py            ✅ # models.yaml → the 10 configs, cheapest first
+│   ├── experiment.py        ✅ # experiment.yaml + stratified, seeded sampling
+│   ├── runner.py            ✅ # THE paid loop. Cap aborts before spending
 │   ├── extract.py           ✅ # raw response → runnable Python
 │   ├── cost.py              ✅ # tokens → USD (reasoning ⊂ completion, never added twice)
 │   ├── benchmarks/
@@ -244,14 +246,15 @@ thesis/
 │   ├── studio.py            ✅ # local DB browser: any schema, SQL console, edit/delete
 │   ├── studio.html          ✅ # its UI — served by studio.py, not opened directly
 │   ├── view.py              ✅ # terminal viewer  (NOT inspect.py — shadows the stdlib)
-│   ├── pilot.py                # NOT WRITTEN YET
-│   └── run_grid.py             # NOT WRITTEN YET
+│   ├── pilot.py             ✅ # the pilot / the grid. COSTS MONEY
+│   └── run_grid.py             # not needed: pilot.py --set grid
 ├── data/
 │   ├── carr.sqlite          ✅ # gitignored. THE scientific asset — back it up
 │   └── backups/             ✅ # gitignored. Auto-snapshot before any studio write
 └── tests/
     ├── test_verify.py       ✅ # 8 tests — the grader must be right
     ├── test_verify_lcb.py   ✅ # 11 tests — hand-written references, no canonicals exist
+    ├── test_runner.py       ✅ # 16 tests — THE COST CAP. Proves it aborts
     ├── test_extract.py      ✅ # 11 tests — extraction must never raise or invent
     └── test_db.py           ✅ # 13 tests — never pay twice
 ```
@@ -546,6 +549,10 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 | 2026-07-26 | Terminal viewer named `view.py`, **not** `inspect.py` | A script named `inspect.py` shadows the stdlib module for every other script in `scripts/`, and it broke the seeding run silently |
 | 2026-07-26 | `--in-tokens` default 600 → **100** | 600 was a pre-Day-2 guess; Day 2 measured medians of 99 (HE+) and 36 (MBPP+). Two docs carried mutually inconsistent grid costs derived from the two values. Grid is **$3.55**, single-sourced from the script |
 | 2026-07-26 | Exact prices in the roster (`0.0938/0.1876`) rather than rounded | `cost_computed_usd` is compared against `cost_actual_usd` to detect silent price drift; a 0.2% rounding error would read as permanent drift |
+| 2026-07-26 | **`request_hash` now includes `problem_id`** | Two problems sharing a prompt collided: the second silently got no generation, no result and no routing label. CARR's target is "cheapest config that passes *this* problem", which needs every problem run through every config, so the hole would have been invisible. Zero collisions in the current pool, so the fix costs nothing; existing rows were migrated in place, not re-bought |
+| 2026-07-26 | The cap is checked against **lifetime** spend, not per-run | Five runs that each respect their own limit still empty the account |
+| 2026-07-26 | Cheapest-first ordering is **global**, across problems, not per problem | If the cap fires, the result is a complete cheap foundation rather than a random half of every problem |
+| 2026-07-26 | `retries: 0` in `experiment.yaml` | A retry loop is how a cost cap gets defeated. A failed call is recorded and skipped; re-running the script picks it up |
 | 2026-07-26 | **LiveCodeBench adopted as a difficulty tier, and its contamination claim dropped** | The saturation finding made a hard tier load-bearing, and LCB is the only source of one. But its contamination-resistance depends on release-date filtering, and there is no post-cutoff window left: it stopped updating in 2025, our models are 2026. Reporting the exposure is the only honest option |
 | 2026-07-26 | LCB grading lives in `verify.py` as a **second path**, not a second module | CLAUDE.md keeps grading in one file. Nothing is shared with the evalplus path — no canonical solutions, no `atol`, no special oracles, and two execution styles — so it is a branch in `grade()` rather than an abstraction over both |
 | 2026-07-26 | LCB stdin problems get one added sentence about reading stdin | The statement alone does not say how the program receives input, so the task is not well-posed. It is a constant string, identical across every config, so it cannot confound the effort axis — but it *is* a documented deviation from "send the prompt unmodified" |

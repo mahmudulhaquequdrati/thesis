@@ -165,18 +165,29 @@ def init_schema(conn: sqlite3.Connection) -> None:
 
 
 def request_hash(model_slug: str, effort_label: str, prompt: str,
-                 params: dict[str, Any]) -> str:
-    """Stable id for one purchasable request.
+                 params: dict[str, Any], problem_id: str) -> str:
+    """Stable id for one grid cell.
 
-    Deliberately covers exactly the four things that change what we get back.
     `json.dumps(sort_keys=True)` so dict ordering cannot produce two hashes for
     the same request -- that would mean buying the same generation twice.
+
+    `problem_id` is in here even though it does not change what the API returns
+    (the prompt already determines that). Without it, two problems that happen
+    to share a prompt collide: the second one silently gets no generation row,
+    no result, and therefore no routing label -- and CARR's target is
+    "cheapest config that passes THIS problem", which needs every problem to
+    have been run through every config. That hole would be invisible.
+
+    The trade is paying twice for genuinely identical prompts. Across the
+    current 717-problem pool there are zero duplicate prompts, so the trade
+    costs nothing today and closes a failure that could not be detected later.
     """
     payload = "\x00".join([
         model_slug,
         effort_label,
         prompt,
         json.dumps(params, sort_keys=True, separators=(",", ":")),
+        problem_id,
     ])
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -368,3 +379,34 @@ def summary(conn: sqlite3.Connection) -> dict[str, Any]:
             " FROM generations WHERE is_mock = 0"
         ),
     }
+
+
+def migrate_request_hashes(conn: sqlite3.Connection) -> int:
+    """Recompute every `request_hash` with the current formula. Idempotent.
+
+    Run after changing what `request_hash` covers. Without it, existing rows
+    keep hashes the current code will never generate, so the dedup check misses
+    them and the runner re-buys generations that are already paid for.
+
+    Returns the number of rows changed. Zero means everything already matches.
+    """
+    rows = conn.execute(
+        """SELECT g.gen_id, g.request_hash, g.problem_id,
+                  p.prompt, c.model_slug, c.effort_label, c.params_json
+           FROM generations g
+           JOIN problems p ON p.problem_id = g.problem_id
+           JOIN configs  c ON c.config_id  = g.config_id"""
+    ).fetchall()
+
+    updates = []
+    for r in rows:
+        want = request_hash(r["model_slug"], r["effort_label"], r["prompt"],
+                            json.loads(r["params_json"]), r["problem_id"])
+        if want != r["request_hash"]:
+            updates.append((want, r["gen_id"]))
+
+    if updates:
+        conn.executemany(
+            "UPDATE generations SET request_hash = ? WHERE gen_id = ?", updates)
+        conn.commit()
+    return len(updates)

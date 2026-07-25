@@ -74,6 +74,12 @@ def main() -> None:
     conn.commit()
     print(f"  configs   {len(configs):>5}   from config/models.yaml")
 
+    # Idempotent: brings already-bought rows onto the current request_hash
+    # formula so they are still recognised as bought and never re-purchased.
+    changed = db.migrate_request_hashes(conn)
+    if changed:
+        print(f"  migrated  {changed:>5}   request_hash values (no re-purchase)")
+
     import evalplus.data as ep
 
     total = 0

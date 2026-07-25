@@ -38,22 +38,36 @@ def seeded(conn):
 
 def test_hash_is_stable_across_dict_ordering():
     """Two spellings of the same params must not produce two purchases."""
-    a = db.request_hash("m", "high", "p", {"reasoning": {"effort": "high"}})
-    b = db.request_hash("m", "high", "p", {"reasoning": {"effort": "high"}})
+    a = db.request_hash("m", "high", "p", {"reasoning": {"effort": "high"}}, "T/1")
+    b = db.request_hash("m", "high", "p", {"reasoning": {"effort": "high"}}, "T/1")
     assert a == b
 
 
 def test_hash_covers_each_axis():
-    base = db.request_hash("m", "off", "p", {})
-    assert base != db.request_hash("m2", "off", "p", {})
-    assert base != db.request_hash("m", "high", "p", {})
-    assert base != db.request_hash("m", "off", "p2", {})
-    assert base != db.request_hash("m", "off", "p", {"reasoning": {"enabled": False}})
+    base = db.request_hash("m", "off", "p", {}, "T/1")
+    assert base != db.request_hash("m2", "off", "p", {}, "T/1")
+    assert base != db.request_hash("m", "high", "p", {}, "T/1")
+    assert base != db.request_hash("m", "off", "p2", {}, "T/1")
+    assert base != db.request_hash("m", "off", "p", {"reasoning": {"enabled": False}}, "T/1")
+
+
+def test_hash_separates_problems_that_share_a_prompt():
+    """Two problems with an identical prompt must still be two grid cells.
+
+    Without problem_id in the hash the second one silently gets no generation,
+    no result and therefore no routing label -- and CARR's target is "cheapest
+    config that passes THIS problem", which requires every problem to have run
+    through every config. The hole would be invisible.
+    """
+    a = db.request_hash("m", "off", "same prompt", {}, "T/1")
+    b = db.request_hash("m", "off", "same prompt", {}, "T/2")
+    assert a != b
 
 
 def test_hash_cannot_be_confused_by_concatenation():
     """Fields are NUL-joined, so 'ab'+'c' and 'a'+'bc' stay distinct."""
-    assert db.request_hash("ab", "c", "p", {}) != db.request_hash("a", "bc", "p", {})
+    assert (db.request_hash("ab", "c", "p", {}, "T/1")
+            != db.request_hash("a", "bc", "p", {}, "T/1"))
 
 
 # ------------------------------------------------------- never pay twice
@@ -61,7 +75,8 @@ def test_hash_cannot_be_confused_by_concatenation():
 
 def test_duplicate_generation_returns_none(seeded):
     conn, cfg = seeded
-    h = db.request_hash(cfg.model_slug, cfg.effort_label, "def f():\n", cfg.params)
+    h = db.request_hash(cfg.model_slug, cfg.effort_label, "def f():\n",
+                        cfg.params, "T/1")
 
     first = db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
                                  request_hash=h, is_mock=1)
@@ -77,7 +92,8 @@ def test_duplicate_generation_returns_none(seeded):
 
 def test_has_generation_matches_insert(seeded):
     conn, cfg = seeded
-    h = db.request_hash(cfg.model_slug, cfg.effort_label, "def f():\n", cfg.params)
+    h = db.request_hash(cfg.model_slug, cfg.effort_label, "def f():\n",
+                        cfg.params, "T/1")
     assert db.has_generation(conn, h) is False
     db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
                          request_hash=h, is_mock=1)
