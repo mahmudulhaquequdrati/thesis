@@ -29,7 +29,7 @@ Before any file makes sense, hold this shape in your head:
               extract the code from it
                          |
                          v
-              run it against 1,006 tests
+           run it against the problem's tests
                          |
                          v
         ONE ROW:  passed? tokens? cost?
@@ -38,6 +38,18 @@ Before any file makes sense, hold this shape in your head:
 Do that ~2,700 times (300 problems × 9 configs) and you have **the table**.
 The table is the thesis. Everything in this repository either **fills** the
 table, **protects** it, or **reads** it.
+
+**How many tests is "the problem's tests"?** It varies a lot, and the figure
+1,006 that appears throughout this tour is `HumanEval/0` specifically — the
+worked example — not a general number. Measured across the actual files:
+
+| | HumanEval+ | MBPP+ |
+|---|---|---|
+| Problems | 164 | 378 |
+| Test inputs, total | 124,253 | 41,015 |
+| Per problem: min / **median** / max | 12 / **982** / 1,100 | 3 / **108** / 150 |
+
+Only 9 of the 164 HumanEval+ problems have exactly 1,006.
 
 Three jobs, and every file belongs to exactly one:
 
@@ -411,9 +423,14 @@ Its current output is the project's central open question:
 
 | Mean thinking tokens | Grid cost | |
 |---|---|---|
-| 3,500 | $3.61 | fits $4 |
-| 6,000 | $5.94 | **over** |
-| 9,000 | $8.75 | **over** |
+| 3,500 | **$3.55** | fits $4 |
+| 6,000 | **$5.89** | **over** — supports ~203 problems |
+| 9,000 | **$8.69** | **over** — supports ~138 problems |
+
+*(Corrected 2026-07-26. This table previously read $3.61/$5.94/$8.75, which was
+not reproducible from the script; THESIS.md §9 separately read $3.82/$6.15/$8.96
+using the pre-Day-2 guess of 600 prompt tokens. The default `--in-tokens` is now
+the measured 100, so both documents derive from one number.)*
 
 Nobody knows which is true yet. That is what the pilot measures, and why the
 pilot is a gate rather than a formality.
@@ -502,16 +519,37 @@ scripts. Not built: the runner, the database, the analysis, the router.
 
 Honest gaps, in priority order:
 
+Built since this tour was first written (2026-07-26): **`carr/db.py`**
+(schema, `request_hash` dedup, read helpers), **`carr/extract.py`**,
+**`carr/cost.py`**, **`carr/effort.py`**, **`carr/providers/{base,echo}.py`**,
+and the two viewers `scripts/view.py` + `scripts/make_viewer.py`. The whole
+chain runs end to end — against a mock provider, for $0.
+
+Honest gaps, in priority order:
+
 | Missing | Why it matters |
 |---|---|
-| **`carr/db.py`** | No database yet. Day 5 |
-| **`carr/providers/openrouter.py`** | API calls only exist inside `day1_hello.py` |
-| **Code extraction** | Pulling ```` ```python ```` blocks out of the response. Day 4 |
-| **`carr/runner.py`** | The loop. Needs `request_hash` dedup and a cost cap that aborts |
-| **LiveCodeBench loader** | **The hard tier.** RQ4 is at risk of a degenerate result without it |
-| **`carr/features.py`** | CARR's inputs |
+| **`carr/providers/openrouter.py`** | **The only thing between here and real data.** API calls still exist only inside `day1_hello.py`. Implement the `Provider` contract in `providers/base.py` and swap it for `echo` |
+| **`carr/runner.py`** | The loop. `seed_mock.py` is a working sketch of it — it already does dedup and cheapest-first ordering — but it lacks a cost cap that *aborts* |
+| **LiveCodeBench loader** | **The hard tier.** RQ4 is at risk of a degenerate result without it. Largest scientific gap in the repo |
+| **`config/experiment.yaml`** | The `$50` hard cap that THESIS.md §9 says lives here has no file to live in yet |
+| **`carr/features.py`** | CARR's inputs. `problems.n_tests` and `prompt_chars` are already stored for it |
 | **`carr/router/`** | CARR itself |
 | **`carr/analysis/`** | Pareto, convex hull, bootstrap CIs |
 
-Roughly 30% of the code exists. But it is the 30% that protects the other 70%
-from producing wrong numbers — which is the right order to build in.
+Roughly half the code exists. It is the half that protects the rest from
+producing wrong numbers — which is the right order to build in.
+
+## How to look at the data right now
+
+```bash
+uv run python scripts/seed_mock.py     # $0, no network
+uv run python scripts/view.py --list
+uv run python scripts/view.py HumanEval/0
+uv run python scripts/make_viewer.py && open data/viewer.html
+```
+
+The mock rows are fake responses graded by the **real** grader, so what you are
+looking at is the true shape of every column — and the seeder asserts that every
+canonical solution it feeds through comes back PASS, which is a mass-scale
+version of `test_canonical_solutions_pass`.

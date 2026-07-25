@@ -8,9 +8,15 @@ grading would silently mislabel those, and a wrong label corrupts every number
 downstream -- the Pareto frontier, CPC, and CARR's routing target all read from
 `results.passed`.
 
-Isolation comes from evalplus too: each check runs in a subprocess with a memory
-cap and an adaptive timeout, under reliability_guard(), which disables
-os.system, os.remove, os.fork, subprocess and ~40 other calls.
+Isolation comes from evalplus too: each check runs in a subprocess under an
+adaptive timeout and reliability_guard(), which disables os.system, os.remove,
+os.fork, subprocess and ~40 other calls. There is deliberately NO memory cap --
+see the comment on EVALPLUS_MAX_MEMORY_BYTES below; runaway allocation is
+bounded by the timeout instead.
+
+Note what this is not: evalplus's own docstring for reliability_guard says it
+"is NOT a security sandbox". It contains accidents and casual hostility, which
+is the threat model for benchmark solutions, not a determined adversary.
 """
 
 from __future__ import annotations

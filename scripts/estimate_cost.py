@@ -9,11 +9,14 @@ Run:  uv run python scripts/estimate_cost.py
 """
 
 import argparse
+import sys
 from pathlib import Path
 
-import yaml
+# The repo is run in place, not installed (see pyproject.toml). pytest gets this
+# from `pythonpath`; scripts invoked directly have to say it themselves.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-ROOT = Path(__file__).resolve().parent.parent
+from carr.effort import load_configs  # noqa: E402
 
 
 def main() -> None:
@@ -22,8 +25,12 @@ def main() -> None:
                     help="problems in the full grid")
     ap.add_argument("--subset", type=int, default=100,
                     help="problems for the held-out (RQ5) model")
-    ap.add_argument("--in-tokens", type=int, default=600,
-                    help="mean prompt tokens per problem")
+    # 600 was the pre-Day-2 guess. Day 2 measured the real medians: 99 tokens
+    # for HumanEval+ and 36 for MBPP+, ~6x smaller. 100 is the honest default;
+    # it also means input cost is a rounding error and effectively the whole
+    # budget is output plus reasoning tokens.
+    ap.add_argument("--in-tokens", type=int, default=100,
+                    help="mean prompt tokens per problem (measured Day 2)")
     ap.add_argument("--off-tokens", type=int, default=350,
                     help="mean completion tokens with thinking off")
     ap.add_argument("--think-tokens", type=int, default=3500,
@@ -32,25 +39,18 @@ def main() -> None:
                     help="available balance in USD")
     args = ap.parse_args()
 
-    cfg = yaml.safe_load((ROOT / "config" / "models.yaml").read_text())
-
-    rows = []
-    for model in cfg["models"]:
-        for effort in model["efforts"]:
-            out_tok = args.off_tokens if effort["label"] == "off" else args.think_tokens
-            rows.append((model["slug"], effort["label"], model["price_in_per_m"],
-                         model["price_out_per_m"], args.problems, out_tok))
-    for model in cfg.get("held_out", []):
-        for effort in model["efforts"]:
-            out_tok = args.off_tokens if effort["label"] == "off" else args.think_tokens
-            rows.append((model["slug"] + " (held-out)", effort["label"],
-                         model["price_in_per_m"], model["price_out_per_m"],
-                         args.subset, out_tok))
-
     priced = []
-    for slug, effort, p_in, p_out, n, out_tok in rows:
-        cost = (n * args.in_tokens * p_in + n * out_tok * p_out) / 1e6
-        priced.append((cost, slug, effort, n, out_tok))
+    for c in load_configs():
+        # The held-out model runs on a subset, not the full grid: RQ5 asks
+        # whether CARR transfers to an unseen model, which does not need full
+        # coverage, and at $2.72/M output full coverage would cost more than
+        # every other config combined.
+        n = args.subset if c.held_out else args.problems
+        out_tok = args.off_tokens if c.effort_label == "off" else args.think_tokens
+        slug = c.model_slug + " (held-out)" if c.held_out else c.model_slug
+        cost = (n * args.in_tokens * c.price_in_per_m
+                + n * out_tok * c.price_out_per_m) / 1e6
+        priced.append((cost, slug, c.effort_label, n, out_tok))
     # Cheapest first -- the same order runner.py must use, so that a budget
     # breach costs the expensive tail rather than the cheap foundation.
     priced.sort()

@@ -42,7 +42,8 @@ counts, and row counts appear in several sections. Changing one means grepping
 for the old value and updating all of them:
 
 ```bash
-grep -n '\$50\|434\|3,906\|9 config' THESIS.md README.md CLAUDE.md
+grep -rn '\$50\|\$4\.00\|300 problems\|2,700\|9 config\|\$3\.55' \
+  THESIS.md README.md CLAUDE.md docs/
 ```
 
 Exception: **§12 (decisions log) is append-only history.** Superseded values
@@ -72,6 +73,8 @@ Real money, and the user's own. Treat overspending as a bug, not a tradeoff.
 - **Never grade generated code outside `carr/execute/verify.py`.** It wraps evalplus's `untrusted_check`: subprocess isolation, timeouts, and `reliability_guard`. Do not hand-roll grading — `atol` float comparison and MBPP special oracles make pass/fail more than `==`, and a mislabel corrupts every downstream number invisibly.
 - **Never remove `EVALPLUS_MAX_MEMORY_BYTES=-1`** from `verify.py` without reading the comment above it. On macOS its absence silently makes every solution fail as a "timeout".
 - **Store `raw_response` verbatim.** Code-extraction logic has bugs; keeping raw responses means re-grading offline for free instead of re-buying generations.
+- **Mock rows must be flagged.** Anything not bought from a real API gets `generations.is_mock = 1`. Every analysis query filters on it. A seeded row and a $0.0006 purchased row are otherwise indistinguishable.
+- **Never name a file in `scripts/` after a stdlib module.** Python puts the script's own directory first on `sys.path`, so `scripts/inspect.py` shadows `inspect` for *every* script in that directory — and the failure is a confusing `AttributeError` deep inside a dependency, not an import error. This already cost one run; the viewer is `view.py` for this reason.
 - **`.env` is never committed.** It is gitignored — keep it that way.
 - **`data/carr.sqlite` is the scientific asset.** It costs real money to regenerate. Gitignored, but tell the user to back it up separately.
 - **Fixed seeds everywhere** — sampling, splits, bootstrap. Reproducibility is a graded property of a thesis.

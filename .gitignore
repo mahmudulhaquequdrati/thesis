@@ -16,3 +16,6 @@ wheels/
 # separately (it costs real money to regenerate), but keep it out of git.
 data/*.sqlite
 data/figures/
+# Regenerated from the database by scripts/make_viewer.py -- never hand-edited,
+# and it inlines the whole dataset, so it does not belong in git either.
+data/viewer.html

@@ -6,7 +6,7 @@
 # Never hardcode a model id anywhere else in the codebase. The open-weight
 # landscape moves every 6-8 weeks; this file is the only place that knows.
 
-snapshot_date: "2026-07-25"
+snapshot_date: "2026-07-26"
 verified_against: "https://openrouter.ai/api/v1/models"
 
 # Four models x two effort levels = 8 configs, plus one held-out model.
@@ -35,8 +35,11 @@ models:
     # Remarkably cheap for its tier -- cheaper per output token than
     # qwen3.6-35b despite sitting higher on most leaderboards. Expect it to
     # dominate a large stretch of the Pareto frontier.
-    price_in_per_m: 0.094
-    price_out_per_m: 0.188
+    # Exact live values, not rounded: cost_computed_usd is compared against
+    # cost_actual_usd to detect silent price drift, so a 0.2% rounding error
+    # here would look like drift forever.
+    price_in_per_m: 0.0938
+    price_out_per_m: 0.1876
     context_length: 1048576
     supports_reasoning: true
     efforts:

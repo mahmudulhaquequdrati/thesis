@@ -184,11 +184,14 @@ generation. Grade offline from stored responses; never re-call the API to re-gra
 | Column | Type | Source |
 |---|---|---|
 | `gen_id` | INTEGER PK FK | |
-| `passed` | INTEGER | 1 if all assertions survive |
+| `passed` | INTEGER | 1 only if **both** base and plus tests survive |
+| `base_passed` | INTEGER | Original benchmark tests only. Added 2026-07-26 — `GradeResult` already produced it, and the §11 saturation check needs it |
 | `n_tests_passed` | INTEGER | Diagnostic, not the metric |
 | `n_tests_total` | INTEGER | |
-| `error_type` | TEXT | `syntax` / `assertion` / `timeout` / `exception` |
+| `error_type` | TEXT | **`assertion` or `timeout` only**, enforced by a CHECK constraint. Narrowed 2026-07-26: `grade()` never emits `syntax` or `exception`, and a documented-but-impossible value is a trap for anyone writing a query against it |
 | `exec_ms` | INTEGER | |
+
+Implemented in [`carr/db.py`](../carr/db.py); that file is authoritative.
 
 ---
 
