@@ -32,17 +32,29 @@ Everything it can change is reversible: the whole database is snapshotted to
 `data/backups/` before the first write of each session. Start it with
 `--read-only` to disable writing entirely.
 
-For the CARR-specific view of one problem across all 9 configs, use the terminal:
+For the CARR-specific view of one problem across all 10 configs, use the terminal:
 
 ```bash
 uv run python scripts/view.py --list          # every problem, one line each
-uv run python scripts/view.py HumanEval/0     # all 9 configs side by side
+uv run python scripts/view.py HumanEval/0     # all 10 configs side by side
 uv run python scripts/view.py HumanEval/0 -c 3   # prompt → response → code → grade
 ```
 
 `init_db.py` loads only what is real and free: 542 problems from evalplus and
-the 9 verified configs. **`generations` and `results` start empty** — those rows
-cost money and only the pilot can fill them.
+the 10 verified configs. `generations` and `results` start empty — those rows
+cost money.
+
+## Buy a row (this spends real money)
+
+```bash
+uv run python scripts/run_one.py --all --dry-run          # free; shows the bill first
+uv run python scripts/run_one.py --config 1 --yes         # one call, ~$0.0001
+uv run python scripts/run_one.py --all --yes              # 10 configs, ~$0.02
+```
+
+It refuses to send anything if the **worst case** — `max_tokens` × the output
+price, summed over every cell — exceeds `--max-usd` (default $0.20). Cells
+already bought are skipped via `request_hash`, so re-running costs nothing.
 
 Other free checks:
 

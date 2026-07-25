@@ -9,7 +9,8 @@
 snapshot_date: "2026-07-26"
 verified_against: "https://openrouter.ai/api/v1/models"
 
-# Four models x two effort levels = 8 configs, plus one held-out model.
+# Five models x two effort levels = 10 configs. The held-out model runs on a
+# SUBSET of problems, but on both effort levels.
 # Pairing each model with itself at two effort levels keeps the effort axis
 # clean: the only thing that changes within a pair is the thinking mode.
 models:
@@ -96,7 +97,15 @@ held_out:
     context_length: 262144
     supports_reasoning: true
     subset_only: true
+    # BOTH efforts, like every other model. `subset_only` cuts the number of
+    # problems, never the effort axis: with one effort kimi would have a single
+    # point on the cost-accuracy plane, no measurable thinking delta, and RQ5
+    # would test transfer along the model axis only -- not the effort axis,
+    # which is the one this thesis is about. The cheap half costs $0.10.
     efforts:
+      - label: "off"
+        mechanism: native_toggle
+        params: {reasoning: {enabled: false}}
       - label: "high"
         mechanism: native_toggle
         params: {reasoning: {effort: "high"}}

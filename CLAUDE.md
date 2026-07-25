@@ -42,7 +42,7 @@ counts, and row counts appear in several sections. Changing one means grepping
 for the old value and updating all of them:
 
 ```bash
-grep -rn '\$50\|\$4\.00\|300 problems\|2,700\|9 config\|\$3\.55' \
+grep -rn '\$50\|\$4\.00\|300 problems\|2,600\|10 config\|\$3\.55' \
   THESIS.md README.md CLAUDE.md docs/
 ```
 

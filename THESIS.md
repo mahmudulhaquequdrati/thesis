@@ -13,14 +13,16 @@
 
 | | |
 |---|---|
-| **Stage** | Week 1 — Days 1–3 ✅, **Day 4 chain + Day 5 schema built and proven on mock data**. Only the paid API call is still missing. |
-| **Next action** | **Day 4 (real):** write `carr/providers/openrouter.py` to the `Provider` contract in `carr/providers/base.py` and swap it for `echo` in the runner. Then **the pilot** — which gates grid size. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
-| **Spend to date** | ~$0.001 of **$4.00 loaded** ($50 ceiling) |
-| **Rows in dataset** | **0 of ~2,700** (300 problems × 9 configs — final count set by the pilot). `data/carr.sqlite` holds the real, free half: **542 problems + 9 configs**. `generations` and `results` are empty and stay that way until the pilot buys them |
-| **Blocked on** | Nothing. Advisor conversation runs in parallel, does not block the build |
+| **Stage** | **Week 1 COMPLETE.** Days 1–5 ✅. Real generations flowing end to end: problem → OpenRouter → extract → grade → row. |
+| **Next action** | **Week 2 — the pilot.** Needs `carr/runner.py` (many problems, aborting cost cap, batched cost reconciliation) and `config/experiment.yaml`. Sample must be **difficulty-spread, not the first N problems** — see the saturation finding below. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
+| **Spend to date** | **$0.0114** of **$4.00 loaded** ($50 ceiling) |
+| **Rows in dataset** | **10 real of ~2,600** (300 problems × 10 configs — final count set by the pilot). Plus the free half: 542 problems + 10 configs |
+| **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
-- `2026-07-26` — **Mock data removed; `scripts/studio.py` added.** All 360 seeded rows deleted, along with `seed_mock.py`, `make_viewer.py` and `providers/echo.py` — they had done their job (proving the chain and the dedup) and keeping fake rows next to real ones is a hazard. `scripts/init_db.py` now builds the database from real, free sources only: **542 problems** from evalplus + **9 configs** from the roster, with `generations`/`results` deliberately empty. Studio is a local SQLite browser (stdlib only, loopback only) with sort, search, pagination, a read-only SQL console, and row edit/delete. It introspects the schema per request, so it adapts to whatever the file contains. **Every write snapshots the database to `data/backups/` first** — verified by deleting 2 rows and confirming the snapshot still held 542. `--read-only` disables writing.
+- `2026-07-26` — **Day 4 ✅ — Week 1 complete. First real generations, $0.0103.** `carr/providers/openrouter.py` + `scripts/run_one.py` (hard cap on *worst-case* spend that aborts before sending; dedup; cheapest-expected-first). One problem × all 10 configs. **Three findings, two of them serious.** (1) ⚠️ **Saturation is real and immediate: 10/10 configs solved `HumanEval/0`, including every no-reasoning config.** That is the risk §11 names as most likely to invalidate the headline result, visible on the very first cell. The pilot sample must be difficulty-spread, and the LiveCodeBench hard tier moves from "nice to have" to load-bearing. (2) **Thinking tokens measured far below assumption: mean 963 (range 278–1,915) against the 3,500 guess.** Grid re-prices from $3.66 to **$1.76** — but this is one easy problem, not a pilot; hard problems will pull it up. (3) **58× cost spread for an identical outcome** — $0.000081 (flash·off) to $0.004673 (kimi·high), all PASS. That spread is the thesis. Routing target for this problem: `deepseek-v4-flash | off`, as §9 predicted.
+- `2026-07-26` — **Kimi given both effort levels; roster 9 → 10 configs (+$0.10).** `subset_only` cuts *problems*, never the effort axis. With one effort kimi had a single point on the cost-accuracy plane, no measurable thinking delta, and RQ5 would have tested transfer along the model axis only — not the effort axis, which is what the thesis is about. Also corrected a pre-existing count error: the grid is **~2,600 rows**, not 2,700 (8 full configs × 300 + 2 held-out × 100); the old figure assumed kimi ran the full 300, contradicting `subset_only`.
+- `2026-07-26` — **Mock data removed; `scripts/studio.py` added.** All 360 seeded rows deleted, along with `seed_mock.py`, `make_viewer.py` and `providers/echo.py` — they had done their job (proving the chain and the dedup) and keeping fake rows next to real ones is a hazard. `scripts/init_db.py` now builds the database from real, free sources only: **542 problems** from evalplus + **10 configs** from the roster, with `generations`/`results` deliberately empty. Studio is a local SQLite browser (stdlib only, loopback only) with sort, search, pagination, a read-only SQL console, and row edit/delete. It introspects the schema per request, so it adapts to whatever the file contains. **Every write snapshots the database to `data/backups/` first** — verified by deleting 2 rows and confirming the snapshot still held 542. `--read-only` disables writing.
 - `2026-07-26` — **Pipeline made visible, on mock data, for $0.** Built `carr/{effort,db,extract,cost}.py` + `carr/providers/{base,echo}.py`, so the whole chain (problem → prompt → response → extract → grade → row) runs end to end with `EchoProvider` standing in for the API. Two viewers: `scripts/view.py` (terminal) and `scripts/make_viewer.py` → a self-contained `data/viewer.html`. **`request_hash` dedup proven working** — a re-run inserts 0 rows, so a crashed grid restart is free. **Three real bugs caught before any money was spent:** (1) `scripts/inspect.py` shadowed the stdlib `inspect` module and broke every script in `scripts/` → renamed `view.py`; (2) the echo provider's fallback mutation appended an *unreachable* `return None`, so rows labelled as failures graded PASS → now shadows the entry point; (3) `docs/codebase-tour.md`'s "$3.61" grid cost was not reproducible from the script — the real cause was `--in-tokens 600`, a pre-Day-2 guess, now defaulted to the measured 100. Roster re-verified live: all 5 slugs exist, prices match, `reasoning` supported. **`scripts/verify_roster.py` now exists** — four docs referenced it and it never had.
 - `2026-07-25` — Proposal analysed. GLM dropped from roster. Decisions locked (§12). Master doc created.
 - `2026-07-25` — Day 1 scaffold: `uv` project on **Python 3.12.13** (system 3.14.3 avoided), `git init`, `openai` + `python-dotenv` installed, `.env` gitignored, `scripts/day1_hello.py` written. Verified working. Waiting on the key to make the first call.
@@ -117,8 +119,8 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 | ✅ | 1 | Toolchain + one API call | **Done.** Key verified; 412 completion tokens of which **392 were reasoning** |
 | ✅ | 2 | Load real benchmark problems | **Done.** `scripts/day2_inspect_problems.py`; full contract in [docs/data-spec.md](docs/data-spec.md) |
 | ✅ | 3 | Sandboxed grader | **Done.** 8/8 tests pass incl. canonical solutions, infinite loop, hostile `os.system` |
-| 🟨 | 4 | Connect the pieces | Chain proven end to end against a mock backend, then the mock was removed. **Remaining: `carr/providers/openrouter.py`** — the one piece between here and real data |
-| ✅ | 5 | Save to SQLite | **Done.** `carr/db.py` schema + dedup, tested; `scripts/init_db.py` loads 542 problems + 9 configs. Empty grid is the correct state |
+| ✅ | 4 | Connect the pieces | **Done.** `HumanEval/0 | qwen/qwen3.5-9b | off | PASS | 1006/1006 | 614 tok | $0.000106` — then all 10 configs, $0.0103 |
+| ✅ | 5 | Save to SQLite | **Done.** `carr/db.py` schema + dedup, tested; `scripts/init_db.py` loads 542 problems + 10 configs. Empty grid is the correct state |
 | ✅ | 5 | Roster verification | **Done early**, and `scripts/verify_roster.py` now makes it repeatable |
 | ✅ | — | See the data | **Done.** `scripts/studio.py` (browser, any schema, edit/delete) and `scripts/view.py` (terminal, CARR-specific) |
 
@@ -126,7 +128,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 | | Week | Milestone | Spend |
 |---|---|---|---|
 | ⬜ | 2 | Widen harness: all loaders, all configs, resumability, cost cap, echo tests | $0 |
-| ⬜ | 2 | Pilot: 10 problems × 3 configs → real costs + **saturation check** | ~$2 |
+| ⬜ | 2 | Pilot: **difficulty-spread** problems × all configs → real costs + **saturation check** (already firing — see §11) | ~$0.30 |
 | ⬜ | 3–4 | **Full grid run** (cheapest configs first) | $18–28 |
 | ⬜ | 5 | RQ1–RQ3: Pareto frontier, convex hull, CPC/TPC with CIs | $0 |
 | ⬜ | 6–7 | CARR: features, oracle, rules, k-NN, 4 scenarios, gap decomposition | $0 |
@@ -212,8 +214,8 @@ thesis/
 │   ├── db.py                ✅ # schema + idempotent upsert + read helpers
 │   ├── providers/
 │   │   ├── base.py          ✅ # the Provider contract: Generation, Usage
-│   │   └── openrouter.py       # the only real adapter — NOT WRITTEN YET
-│   ├── effort.py            ✅ # models.yaml → the 9 configs, cheapest first
+│   │   └── openrouter.py    ✅ # the real adapter. Every call costs money
+│   ├── effort.py            ✅ # models.yaml → the 10 configs, cheapest first
 │   ├── extract.py           ✅ # raw response → runnable Python
 │   ├── cost.py              ✅ # tokens → USD (reasoning ⊂ completion, never added twice)
 │   ├── benchmarks/             # humaneval_plus / mbpp_plus / livecodebench loaders
@@ -234,6 +236,7 @@ thesis/
 │   ├── estimate_cost.py     ✅ # price the grid before running it
 │   ├── verify_roster.py     ✅ # roster vs live /models — free, exits non-zero on drift
 │   ├── init_db.py           ✅ # build the DB from evalplus + the roster (real, free)
+│   ├── run_one.py           ✅ # one problem through 1..N configs. COSTS MONEY
 │   ├── studio.py            ✅ # local DB browser: any schema, SQL console, edit/delete
 │   ├── studio.html          ✅ # its UI — served by studio.py, not opened directly
 │   ├── view.py              ✅ # terminal viewer  (NOT inspect.py — shadows the stdlib)
@@ -441,6 +444,30 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 
 **Action:** check the pass-rate spread during the Week-2 pilot. If the cheapest config solves 9 of 10 HumanEval+ problems, rebalance the sample immediately.
 
+> ### ⚠️ 2026-07-26 — this is no longer hypothetical
+>
+> The **first real cell** of the grid, `HumanEval/0` × all 10 configs, came back
+> **10/10 PASS**. Every no-reasoning config solved it, including the cheapest
+> model on the roster. Cost ranged 58× — $0.000081 to $0.004673 — for an
+> identical outcome.
+>
+> One problem is not evidence of the rate, and `HumanEval/0` is close to the
+> easiest problem in the benchmark. But the direction is exactly the failure
+> mode this section describes, and it appeared immediately.
+>
+> **Three consequences, all now load-bearing:**
+> 1. **The pilot sample must be difficulty-spread, not the first N problems.**
+>    A pilot over `HumanEval/0..9` would report ~100% pass everywhere and teach
+>    nothing.
+> 2. **The LiveCodeBench hard tier moves from "nice to have" to required.** If
+>    HumanEval+ and MBPP+ saturate, RQ4 has no headroom to route in: the answer
+>    to "which config should I use" becomes "always the cheapest", which is a
+>    true but empty result.
+> 3. **Report the saturation rate as a finding, not a footnote.** "Reasoning is
+>    unnecessary on N% of standard benchmark problems" is a legitimate and
+>    interesting result — but only if it is measured deliberately rather than
+>    discovered in the discussion section.
+
 ### Other risks
 
 | Risk | Mitigation |
@@ -486,6 +513,9 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 | 2026-07-26 | Terminal viewer named `view.py`, **not** `inspect.py` | A script named `inspect.py` shadows the stdlib module for every other script in `scripts/`, and it broke the seeding run silently |
 | 2026-07-26 | `--in-tokens` default 600 → **100** | 600 was a pre-Day-2 guess; Day 2 measured medians of 99 (HE+) and 36 (MBPP+). Two docs carried mutually inconsistent grid costs derived from the two values. Grid is **$3.55**, single-sourced from the script |
 | 2026-07-26 | Exact prices in the roster (`0.0938/0.1876`) rather than rounded | `cost_computed_usd` is compared against `cost_actual_usd` to detect silent price drift; a 0.2% rounding error would read as permanent drift |
+| 2026-07-26 | **Kimi held-out model gets BOTH effort levels** (roster 9 → 10 configs, +$0.10) | `subset_only` is a cut to the number of *problems*, not to the effort axis. With one effort kimi had a single point on the cost-accuracy plane and no measurable thinking delta, so RQ5 would have tested transfer along the model axis only. The `off` half is the cheap one — no thinking, ~350 output tokens |
+| 2026-07-26 | Run order is by **expected** cost; `config_id` stays ordered by output price | They differ: `off` and `high` share a per-token price but burn ~10× different token counts. `config_id` is an identity that must never move; run order is a budget policy that should |
+| 2026-07-26 | The cost cap aborts on **worst case** (`max_tokens` × output price), not expected case | An expected-case cap is not a cap. `run_one.py` computes the worst case for every cell before sending anything, and refuses the whole invocation if it exceeds `--max-usd` |
 | 2026-07-26 | **Mock rows and the mock machinery deleted once they had paid for themselves** | They proved the chain, the dedup and the grader across 542 problems. Keeping fake rows beside real ones in the scientific asset is a standing hazard, and `is_mock` is a guard against a mistake that no longer needs to be possible. Recoverable from commit `f3da6ff` if offline runner tests are wanted later |
 | 2026-07-26 | Studio is a **local server**, not a static page | A `file://` page cannot write to SQLite, and the ask was to edit and delete rows. Stdlib `http.server`, loopback only, no auth and no new dependency |
 | 2026-07-26 | **Auto-snapshot before every write**, and a read-only SQL console | `generations` cannot be rebuilt without paying again, so a delete button on it needs an undo. `data/backups/` keeps the last 10 |
@@ -585,7 +615,7 @@ At the end of each session:
 5. Update whichever of §4 / §7 / §8 / §9 / §11 / §13 / §14 / §15 the work touched
 6. Check numbers are consistent everywhere:
    ```bash
-   grep -rn '\$50\|\$4\.00\|300 problems\|2,700\|9 config\|\$3\.55' \
+   grep -rn '\$50\|\$4\.00\|300 problems\|2,600\|10 config\|\$3\.55' \
      THESIS.md README.md CLAUDE.md docs/
    ```
 7. Commit

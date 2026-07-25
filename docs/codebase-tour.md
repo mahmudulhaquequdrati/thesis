@@ -35,7 +35,7 @@ Before any file makes sense, hold this shape in your head:
         ONE ROW:  passed? tokens? cost?
 ```
 
-Do that ~2,700 times (300 problems × 9 configs) and you have **the table**.
+Do that ~2,600 times (8 full configs × 300 + 2 held-out × 100) and you have **the table**.
 The table is the thesis. Everything in this repository either **fills** the
 table, **protects** it, or **reads** it.
 
@@ -161,8 +161,8 @@ One SQLite file, `data/carr.sqlite`, with five tables:
 ```
 problems     ~300 rows    what we asked           free
 configs         9 rows    who we asked            free
-generations  ~2,700 rows  what came back          $3.60  <-- the only costly one
-results      ~2,700 rows  did it work             free (CPU only)
+generations  ~2,600 rows  what came back          $3.60  <-- the only costly one
+results      ~2,600 rows  did it work             free (CPU only)
 features     ~300 rows    numbers describing      free
                           each problem, for CARR
 ```
@@ -355,7 +355,7 @@ Eight tests. The grader is the one component that **must** be right.
 |---|---|
 | `test_correct_code_passes` | A right answer scores 1006/1006 |
 | `test_wrong_code_fails` | A **plausible near-miss** is caught — only compares adjacent elements, misses far-apart close pairs. Scores 846/1006 → FAIL |
-| `test_infinite_loop_times_out_cleanly` | `while True: pass` terminates. If this hung, a 2,700-row run would hang |
+| `test_infinite_loop_times_out_cleanly` | `while True: pass` terminates. If this hung, a 2,600-row run would hang |
 | `test_syntax_error_fails_without_crashing` | Broken code fails gracefully |
 | `test_hostile_code_is_contained` | `os.system("echo PWNED > /tmp/...")` does not create the file |
 | `test_canonical_solutions_pass` ×3 | **The most valuable test in the repo** |
@@ -395,7 +395,7 @@ Answers one question: is the ground-truth cost endpoint usable?
 
 Result: **yes, but it needs ~10 seconds to settle** (404 before that). So the
 runner must collect generation IDs and reconcile costs in a **batch afterwards**,
-never blocking per call — otherwise 2,700 calls × 10s adds 7.5 hours.
+never blocking per call — otherwise 2,600 calls × 10s adds 7.5 hours.
 
 ### `day2_inspect_problems.py` (75 lines)
 
@@ -526,7 +526,7 @@ Built since this tour was first written (2026-07-26): **`carr/db.py`**
 
 The chain was proven end to end against a mock provider, and then the mock was
 deleted — it had done its job. `data/carr.sqlite` now holds only real, free
-data: 542 problems and 9 configs. `generations` and `results` are **empty on
+data: 542 problems and 10 configs. `generations` and `results` are **empty on
 purpose**; the only way to fill them is to buy the rows.
 
 Honest gaps, in priority order:
@@ -547,7 +547,7 @@ producing wrong numbers — which is the right order to build in.
 ## How to look at the data right now
 
 ```bash
-uv run python scripts/init_db.py    # 542 problems + 9 configs, free
+uv run python scripts/init_db.py    # 542 problems + 10 configs, free
 uv run python scripts/studio.py     # browser, http://127.0.0.1:8787
 uv run python scripts/view.py --list   # terminal
 ```

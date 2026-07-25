@@ -75,7 +75,7 @@ def _expand(entry: dict, snapshot_date: str, held_out: bool) -> list[Config]:
 
 
 def load_configs(path: Path | str | None = None) -> list[Config]:
-    """Return the 9 configs, cheapest output price first.
+    """Return the 10 configs, cheapest output price first.
 
     Cheapest-first is the order runner.py must also use, so that a budget
     breach costs the expensive tail rather than the cheap foundation.

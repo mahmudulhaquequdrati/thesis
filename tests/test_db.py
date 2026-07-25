@@ -96,18 +96,36 @@ def test_other_integrity_errors_still_raise(seeded):
 # ------------------------------------------------------------- the schema
 
 
-def test_configs_roundtrip_all_nine(conn):
+def test_configs_roundtrip(conn):
+    """Every config in the roster lands, and re-writing updates in place.
+
+    Deliberately counts against `load_configs()` rather than a literal: the
+    roster is expected to change, and a test that hardcodes its size fails for
+    the wrong reason every time it does.
+    """
     configs = load_configs()
-    assert len(configs) == 9
     for cfg in configs:
         db.upsert_config(conn, cfg.tier_index, cfg)
     conn.commit()
-    rows = db.list_configs(conn)
-    assert len(rows) == 9
-    # Re-writing the roster must update in place, not duplicate.
+    assert len(db.list_configs(conn)) == len(configs)
+
     for cfg in configs:
         db.upsert_config(conn, cfg.tier_index, cfg)
-    assert len(db.list_configs(conn)) == 9
+    assert len(db.list_configs(conn)) == len(configs)
+
+
+def test_every_model_has_both_efforts():
+    """No model may sit on one effort level.
+
+    A model with a single config has one point on the cost-accuracy plane and
+    no measurable thinking delta, which is the whole variable under study. This
+    is why the held-out model runs on fewer *problems* but on both efforts.
+    """
+    by_model: dict[str, set[str]] = {}
+    for c in load_configs():
+        by_model.setdefault(c.model_slug, set()).add(c.effort_label)
+    for slug, efforts in by_model.items():
+        assert efforts == {"off", "high"}, f"{slug} has only {efforts}"
 
 
 def test_error_type_domain_is_enforced(seeded):

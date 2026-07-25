@@ -7,7 +7,7 @@ This is the row the whole project is built to produce, made visible:
 Three views:
 
     uv run python scripts/view.py --list             every problem, one line each
-    uv run python scripts/view.py HumanEval/0        all 9 configs for one problem
+    uv run python scripts/view.py HumanEval/0        all 10 configs for one problem
     uv run python scripts/view.py HumanEval/0 -c 3   one cell, in full
 
 The per-problem view ends with the cheapest config that solved it. That single

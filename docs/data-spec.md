@@ -108,7 +108,7 @@ def has_close_elements(numbers, threshold):
 `extract_code()` takes the first ```` ```python ```` fenced block, or the whole
 response if there is no fence. **Store `raw_response` verbatim regardless** —
 extraction logic has bugs, and keeping the raw text means re-parsing offline for
-free instead of re-buying 2,700 generations.
+free instead of re-buying 2,600 generations.
 
 ---
 
@@ -135,7 +135,7 @@ generation. Grade offline from stored responses; never re-call the API to re-gra
 |---|---|---|
 | `problem_id` | TEXT PK | `task_id`, e.g. `HumanEval/0` |
 | `benchmark` | TEXT | `humaneval_plus` / `mbpp_plus` / `livecodebench` |
-| `difficulty` | TEXT | `easy` / `medium` / `hard` — LCB provides it; HE+/MBPP+ are `easy` |
+| `difficulty` | TEXT | `easy` / `medium` / `hard` — LCB only. NULL for HE+/MBPP+, which ship no difficulty label; recording 'easy' would be an invention |
 | `prompt` | TEXT | Sent verbatim |
 | `entry_point` | TEXT | Function name the tests call |
 | `tests_blob` | BLOB | Pickled base+plus inputs. **Never sent** |
@@ -143,7 +143,7 @@ generation. Grade offline from stored responses; never re-call the API to re-gra
 | `prompt_chars` | INTEGER | **A CARR feature** |
 | `release_date` | TEXT | LCB only — contamination filtering |
 
-### `configs` — one row per (model × effort), ~9 rows
+### `configs` — one row per (model × effort), 10 rows
 
 | Column | Type | Source |
 |---|---|---|
@@ -157,7 +157,7 @@ generation. Grade offline from stored responses; never re-call the API to re-gra
 | `price_out_per_m` | REAL | Verified price |
 | `snapshot_date` | TEXT | Reproducibility |
 
-### `generations` — one row per API call, **~2,700 rows. This is the money table.**
+### `generations` — one row per API call, **~2,600 rows. This is the money table.**
 
 | Column | Type | Source |
 |---|---|---|
@@ -200,7 +200,7 @@ Implemented in [`carr/db.py`](../carr/db.py); that file is authoritative.
 ```
 problems       HumanEval/0 | humaneval_plus | easy | 1006 tests | 396 chars
                      |
-                     |  x 9 configs
+                     |  x 10 configs
                      v
 generations    gen 1: qwen3.5-9b      off  | 99 in |   180 out |    0 reasoning | $0.000037
                gen 2: qwen3.5-9b      high | 99 in | 3,200 out | 3,050 reasoning | $0.000490
@@ -232,8 +232,8 @@ must run through **every** config. A sparse grid makes this label uncomputable.
 |---|---|---|---|
 | `problems` | ~300 | free | free |
 | `configs` | 9 | free | free |
-| `generations` | **~2,700** | **$3.60** | **$3.60 — never do this** |
-| `results` | ~2,700 | free (CPU) | free |
+| `generations` | **~2,600** | **$3.60** | **$3.60 — never do this** |
+| `results` | ~2,600 | free (CPU) | free |
 | `features` | ~300 | free (local embeddings) | free |
 
 Only one table costs money. It is also the only one that cannot be regenerated
