@@ -320,7 +320,7 @@ refuses to lower that limit at any value.** The resulting `ValueError` is the
 3. evalplus reports the dead process as a **timeout**
 
 Result: every solution "fails", including evalplus's own reference solutions.
-This would have spent the entire $4 recording that every model fails everything —
+This would have spent the entire balance recording that every model fails everything —
 and the numbers would have looked believable.
 
 `-1` skips the setrlimit block so the rest of the guard actually runs. The cost:
@@ -423,7 +423,7 @@ Its current output is the project's central open question:
 
 | Mean thinking tokens | Grid cost | |
 |---|---|---|
-| 3,500 | **$3.55** | fits $4 |
+| 3,500 | **$3.55** | fits the $6.00 abort threshold |
 | 6,000 | **$5.89** | **over** — supports ~203 problems |
 | 9,000 | **$8.69** | **over** — supports ~138 problems |
 

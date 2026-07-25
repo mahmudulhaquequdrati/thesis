@@ -46,7 +46,10 @@ def main() -> None:
                     help="show the sample and the bill. Free")
     ap.add_argument("--yes", action="store_true", help="skip the confirmation")
     ap.add_argument("--max-usd", type=float,
-                    help="override the cap in experiment.yaml (lower only)")
+                    help="override this run's cap (lower only)")
+    ap.add_argument("--headroom", type=float,
+                    help="per-run cap as a multiple of the estimate "
+                         "(default from experiment.yaml)")
     ap.add_argument("--no-reconcile", action="store_true",
                     help="skip the ground-truth cost lookup at the end")
     ap.add_argument("--db", default=None)
@@ -67,15 +70,25 @@ def main() -> None:
     cells, skipped = runner.plan(conn, problem_ids, configs)
 
     already = runner.lifetime_spend(conn)
-    cap = exp.budget.abort_at_usd
-    if args.max_usd is not None:
-        # Lower only. Raising the cap has to be a deliberate edit to the config
-        # file, not a flag someone reaches for when a run stops.
-        cap = min(cap, args.max_usd)
-
     max_tokens = exp.generation.max_tokens
     expect = sum(c.expected_usd() for c in cells)
     worst = sum(c.worst_usd(max_tokens) for c in cells)
+
+    # Two ceilings, and the run obeys whichever binds first.
+    #
+    #   lifetime -- never spend more than this in total, ever
+    #   this run -- never spend much more than THIS run was estimated to need
+    #
+    # The second exists because a larger account balance is not permission to
+    # spend more. An early stop is not a loss: bought cells are free to skip,
+    # so resuming costs a re-invocation rather than money.
+    headroom = args.headroom if args.headroom is not None else exp.budget.run_headroom
+    run_cap = already + expect * headroom
+    cap = min(exp.budget.abort_at_usd, run_cap)
+    if args.max_usd is not None:
+        # Lower only. Raising a cap has to be a deliberate edit to the config
+        # file, not a flag someone reaches for when a run stops.
+        cap = min(cap, already + args.max_usd)
 
     print("=" * 92)
     print(f"  {args.set.upper()}   seed {exp.seed}")
@@ -97,10 +110,12 @@ def main() -> None:
     print(f"\n  {len(cells)} call(s) to make")
     print(f"  expected      {fmt_usd(expect)}")
     print(f"  WORST CASE    {fmt_usd(worst)}   (max_tokens={max_tokens})")
-    print(f"\n  already spent {fmt_usd(already)}")
-    print(f"  cap           {fmt_usd(cap)}   (loaded balance "
-          f"${exp.budget.loaded_usd:.2f})")
-    print(f"  headroom      {fmt_usd(cap - already)}")
+    print(f"\n  already spent {fmt_usd(already)}   of ${exp.budget.loaded_usd:.2f} loaded")
+    print(f"  this run may spend up to {fmt_usd(cap - already)}"
+          f"   ({headroom:.2f}x the estimate)")
+    print(f"  lifetime cap  {fmt_usd(exp.budget.abort_at_usd)}"
+          f"   (${exp.budget.loaded_usd - exp.budget.abort_at_usd:.2f} of the "
+          f"balance stays unspendable)")
 
     if already + expect > cap:
         print(f"\n  NOTE: even the EXPECTED total would breach the cap. The run "

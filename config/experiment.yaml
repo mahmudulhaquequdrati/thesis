@@ -8,15 +8,23 @@
 budget:
   # The ceiling from CLAUDE.md. Never raise this without the user saying so.
   max_spend_usd: 50.00
-  # What is actually on the OpenRouter account. The real constraint, and far
-  # tighter than the ceiling. An unloaded balance is the last line of defence
-  # against a runaway loop, so the account is deliberately not topped to $50.
-  loaded_usd: 4.00
-  # Where the runner stops. Below `loaded_usd` so a mis-estimate cannot leave
-  # the account empty mid-grid.
-  abort_at_usd: 3.60
+  # What is actually on the OpenRouter account (2026-07-26).
+  loaded_usd: 15.00
+  # Where the runner stops, permanently, across every run.
+  #
+  # Deliberately NOT near the balance. A bigger balance is not a bigger budget:
+  # the work is projected at ~$2-4, so $6 is a generous backstop and the
+  # remaining $9 stays unspendable no matter what a bug does. Raising this is
+  # an edit someone has to make on purpose.
+  abort_at_usd: 6.00
   # Printed as a warning, does not stop anything.
-  warn_at_usd: 2.00
+  warn_at_usd: 3.00
+  # Per-run ceiling, as a multiple of that run's own estimated cost. This is
+  # the "if it can be done for $2, never spend more than $2.20" rule made
+  # mechanical: a run stops at 1.25x its estimate even when the lifetime cap
+  # has room. Stopping is cheap -- bought cells are skipped for free on the
+  # next run -- so an early stop costs a re-invocation, not money.
+  run_headroom: 1.25
 
 generation:
   # docs/data-spec.md section 2. Changing any of these invalidates comparisons

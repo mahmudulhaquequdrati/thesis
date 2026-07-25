@@ -9,7 +9,7 @@ the paid backend and stores the result.
     uv run python scripts/run_one.py --config 0 --yes   # ONE call, ~$0.0001
     uv run python scripts/run_one.py --all --yes        # one problem x 10 configs
 
-Three cost controls, because the balance is $4.00:
+Three cost controls, because a bigger balance is not a bigger budget:
 
   * A hard cap that ABORTS. Before calling anything, the worst case is computed
     as max_tokens x the output price for every cell about to run. If that

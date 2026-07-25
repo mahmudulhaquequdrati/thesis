@@ -14,13 +14,14 @@
 | | |
 |---|---|
 | **Stage** | **Week 1 COMPLETE.** Days 1–5 ✅. Real generations flowing end to end: problem → OpenRouter → extract → grade → row. |
-| **Next action** | **Run the pilot — needs your go-ahead.** `uv run python scripts/pilot.py --dry-run` prices it free: **expected $0.29**, worst case $2.37, cap $3.60. Runner, cap, stratified sampling and cost reconciliation are all built and tested. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
-| **Spend to date** | **$0.0114** of **$4.00 loaded** ($50 ceiling) |
+| **Next action** | **Run the pilot — needs your go-ahead.** `uv run python scripts/pilot.py --dry-run` prices it free: **expected $0.29**, this run capped at **$0.37** (1.25× the estimate). It measures the two numbers that size the grid: thinking tokens on *hard* problems, and the saturation rate. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
+| **Spend to date** | **$0.0114** of **$15.00 loaded** ($50 ceiling; runner aborts at **$6.00**, so $9 stays unspendable) |
 | **Rows in dataset** | **10 real of ~2,600** (~300 problems × 10 configs — final count set by the pilot). Problem pool: **717 loaded** (HumanEval+ 164, MBPP+ 378, LiveCodeBench 175) + 10 configs |
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
-- `2026-07-26` — **Runner, cost cap and pilot built. $0 spent.** `config/experiment.yaml` (the `$50`/`$4.00`/`$3.60` caps finally have a home), `carr/experiment.py` (stratified sampling, fixed seed), `carr/runner.py` (the paid loop) and `scripts/pilot.py`. **The cap aborts before spending, on worst case, against lifetime DB spend** — 16 tests in `tests/test_runner.py` prove it, including that a zero-headroom cap buys literally nothing and that a mid-run stop is resumable. Pilot priced at **expected $0.29 / worst case $2.37** over 15 stratified problems × 10 configs. ⚠️ **Latent bug found and fixed: `request_hash` did not include `problem_id`,** so two problems sharing a prompt would collide and the second would silently get no row, no result and no routing label. Zero collisions in the current 717-problem pool, so it was invisible rather than harmful — now closed, with the 10 existing rows migrated in place rather than re-bought.
+- `2026-07-26` — **Balance raised $4.00 → $15.00; the spending rule tightened rather than loosened.** A bigger balance is not a bigger budget. `abort_at_usd` is **$6.00**, so **$9 of the balance is unspendable** whatever a bug does, and a new per-run ceiling (`run_headroom: 1.25`) keeps any single run within 1.25× *its own* estimate even when the lifetime cap has room — the "if it can be done for $2, never spend $2.20+" rule made mechanical. An early stop costs a re-invocation, not money, because bought cells are skipped for free.
+- `2026-07-26` — **Runner, cost cap and pilot built. $0 spent.** `config/experiment.yaml` (the caps finally have a home), `carr/experiment.py` (stratified sampling, fixed seed), `carr/runner.py` (the paid loop) and `scripts/pilot.py`. **The cap aborts before spending, on worst case, against lifetime DB spend** — 16 tests in `tests/test_runner.py` prove it, including that a zero-headroom cap buys literally nothing and that a mid-run stop is resumable. Pilot priced at **expected $0.29 / worst case $2.37** over 15 stratified problems × 10 configs. ⚠️ **Latent bug found and fixed: `request_hash` did not include `problem_id`,** so two problems sharing a prompt would collide and the second would silently get no row, no result and no routing label. Zero collisions in the current 717-problem pool, so it was invisible rather than harmful — now closed, with the 10 existing rows migrated in place rather than re-bought.
 - `2026-07-26` — **LiveCodeBench loaded — the hard tier exists. $0 spent.** `carr/benchmarks/livecodebench.py` (download + cache + decode) and a second grading path in `verify.py`, because LCB shares nothing with evalplus: 112 problems are stdin→stdout programs, 63 are methods on a `Solution` class, and **LCB ships no canonical solutions at all**. Pool is now **717 problems**; 80 of the 175 LCB problems are `hard`. ⚠️ **Two findings.** (1) **LCB is not contamination-controlled for us** — its newest problem is 2025-04-06, the dataset stopped updating 2025-06-05, and every model on the roster is a 2026 release. It enters as a *difficulty* tier only; `release_date` is stored so exposure can be reported. The proposal's contamination claim is now wrong (§14). (2) With no canonical solutions there is nothing to run through the grader as known-good, so `tests/test_verify_lcb.py` uses **hand-written reference solutions** for both styles — the only thing standing between us and an LCB version of the macOS `setrlimit` bug. 11 LCB tests pass; the references score 43/43 and 34/34.
 - `2026-07-26` — **Day 4 ✅ — Week 1 complete. First real generations, $0.0103.** `carr/providers/openrouter.py` + `scripts/run_one.py` (hard cap on *worst-case* spend that aborts before sending; dedup; cheapest-expected-first). One problem × all 10 configs. **Three findings, two of them serious.** (1) ⚠️ **Saturation is real and immediate: 10/10 configs solved `HumanEval/0`, including every no-reasoning config.** That is the risk §11 names as most likely to invalidate the headline result, visible on the very first cell. The pilot sample must be difficulty-spread, and the LiveCodeBench hard tier moves from "nice to have" to load-bearing. (2) **Thinking tokens measured far below assumption: mean 963 (range 278–1,915) against the 3,500 guess.** Grid re-prices from $3.66 to **$1.76** — but this is one easy problem, not a pilot; hard problems will pull it up. (3) **58× cost spread for an identical outcome** — $0.000081 (flash·off) to $0.004673 (kimi·high), all PASS. That spread is the thesis. Routing target for this problem: `deepseek-v4-flash | off`, as §9 predicted.
 - `2026-07-26` — **Kimi given both effort levels; roster 9 → 10 configs (+$0.10).** `subset_only` cuts *problems*, never the effort axis. With one effort kimi had a single point on the cost-accuracy plane, no measurable thinking delta, and RQ5 would have tested transfer along the model axis only — not the effort axis, which is what the thesis is about. Also corrected a pre-existing count error: the grid is **~2,600 rows**, not 2,700 (8 full configs × 300 + 2 held-out × 100); the old figure assumed kimi ran the full 300, contradicting `subset_only`.
@@ -352,7 +353,7 @@ built, and the code won each time:
 ### Problems — ~300 total (the working figure)
 
 ⚠️ **434 was the $50-budget figure and is superseded.** When the real balance
-turned out to be $4.00, the grid was re-sized to ~300 and every cost estimate
+turned out to be $4.00 (since raised to $15.00), the grid was re-sized to ~300 and every cost estimate
 since uses 300. The 434 breakdown is kept below as history; the **final count is
 set by the pilot**, which measures mean thinking tokens.
 
@@ -392,13 +393,31 @@ is a §14 `.docx` edit: the proposal's contamination argument is now wrong.
 ### Sampling
 One sample per problem, `temperature=0` where honoured. Biggest cost lever, and it makes the "cheapest passing config" label deterministic instead of noisy. **Log the actual temperature** — some thinking endpoints silently override it.
 
-### Budget — **$4.00 loaded**, $50 ceiling
+### Budget — **$15.00 loaded**, aborts at $6.00, $50 ceiling
 
-Actual balance on the OpenRouter account is **$4.00**. Everything below is sized to that. Run `uv run python scripts/estimate_cost.py` for live arithmetic over the verified prices.
+Balance on the OpenRouter account is **$15.00** (topped up 2026-07-26 from
+$4.00). **A bigger balance is not a bigger budget.** The projected work is
+$2–4, so `config/experiment.yaml` sets `abort_at_usd: 6.00` and the remaining
+**$9 is unspendable** no matter what a bug does. Raising that is an edit
+somebody has to make on purpose.
+
+Two ceilings, and a run obeys whichever binds first:
+
+| | | |
+|---|---|---|
+| **Lifetime** | `abort_at_usd: 6.00` | total across every run ever |
+| **Per run** | `run_headroom: 1.25` | 1.25 × *that run's own* estimate |
+
+The per-run one operationalises the rule "if it can be done for $2, never spend
+more than $2.20". It matters because the lifetime cap having room is not a
+reason for a single run to drift. An early stop costs nothing: bought cells are
+skipped for free, so resuming is a re-invocation, not a re-purchase.
+
+Run `uv run python scripts/estimate_cost.py` for live arithmetic over the verified prices.
 
 At the current assumptions (300 problems, **100 in-tok** — the Day 2 *measured*
 median, not the old 600 guess — 350 out-tok off, 3,500 out-tok thinking) the grid
-costs **$3.55 of $4.00**. That is not a margin; it is a rounding error.
+costs **$3.55**, comfortably inside the $6.00 abort threshold — where at $4.00 loaded it was a rounding error rather than a margin.
 
 **⚠️ The whole plan hangs on one unmeasured number: mean thinking tokens.**
 
@@ -425,13 +444,13 @@ Day 1 measured **392 reasoning tokens for "reverse a string"** — the easiest p
 | Days 2–5 slice (40 rows) | ~$0.05 | pending |
 | Pilot (measure tokens) | ~$0.30 | **the gate** |
 | Full grid | $2.5–3.5 | sized *after* the pilot |
-| **Loaded balance** | **$4.00** | |
+| **Loaded balance** | **$15.00** | abort at $6.00; $9 unspendable |
 
 If the pilot shows the grid needs more than ~$3.50, the options are: cut problems (cheapest fix), drop the held-out model (costs RQ5), or add ~$5 to the account.
 
 ### Four cost controls (build these into `runner.py`)
 
-1. **Hard cap that aborts.** `experiment.yaml` holds `max_spend_usd: 50` and `warn_at_usd: 30`. The runner tracks cumulative spend and *stops* — it does not warn and continue.
+1. **Hard cap that aborts.** ✅ Built and tested (16 tests in `tests/test_runner.py`). `config/experiment.yaml` holds `abort_at_usd: 6.00`; `carr/runner.py` refuses any call whose *worst case* would push **lifetime** spend past it, and a per-run `run_headroom` keeps a single run near its own estimate. It stops — it does not warn and continue.
 2. **`max_tokens` ceiling per config.** The largest single cost risk is a reasoning trace that runs away to 30k tokens on one hard problem. Cap it. A truncated response is a legitimate ❌ and costs a known amount.
 3. **Cheapest configs first.** Order the run by ascending price. A blowout then costs you the expensive tail, not the cheap foundation you'd have to re-buy.
 4. **Never pay twice.** The `request_hash UNIQUE` check (§8) is a cost control, not just a convenience.

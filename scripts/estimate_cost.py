@@ -35,8 +35,9 @@ def main() -> None:
                     help="mean completion tokens with thinking off")
     ap.add_argument("--think-tokens", type=int, default=3500,
                     help="mean completion tokens with thinking on (incl. reasoning)")
-    ap.add_argument("--budget", type=float, default=4.0,
-                    help="available balance in USD")
+    ap.add_argument("--budget", type=float, default=6.0,
+                    help="the abort threshold from config/experiment.yaml, "
+                         "NOT the account balance -- see THESIS.md section 9")
     args = ap.parse_args()
 
     priced = []

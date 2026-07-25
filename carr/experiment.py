@@ -29,6 +29,10 @@ class Budget:
     loaded_usd: float
     abort_at_usd: float
     warn_at_usd: float
+    # Per-run ceiling as a multiple of that run's own estimate. A bigger
+    # account balance is not a bigger budget; this keeps each run close to what
+    # the work actually needs even when the lifetime cap has plenty of room.
+    run_headroom: float = 1.25
 
 
 @dataclass
