@@ -20,6 +20,7 @@
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
+- `2026-07-26` — **Searched for harder/newer problems before spending. Two findings, one of them important.** (1) **There is no public code-generation benchmark shipping 2026 problems with test cases.** The frontier is LiveCodeBench-Pro at 2025 Q3 (gated, needs an HF login); LCB proper stopped at 2025-04. Genuinely post-cutoff problems would mean scraping AtCoder/Codeforces and building a benchmark — months, not a step. So contamination stays a reported limitation rather than something we can engineer away. (2) ⚠️ **Found the closest prior art yet: [Agent-as-a-Router / CodeRouterBench](https://arxiv.org/abs/2606.22902) (Jun 2026)** — routing for coding tasks, 8 backends, 9,999 tasks × 8 models released free. Checked against the data: it has **no effort axis and no reasoning-token column**, and its router is trained (LoRA). It sharpens our claim rather than displacing it, but it must be cited (§15.3) — and its 79,992-row matrix is the best free target yet for prototyping `router/knn.py` at $0 (§15.2).
 - `2026-07-26` — **Balance raised $4.00 → $15.00; the spending rule tightened rather than loosened.** A bigger balance is not a bigger budget. `abort_at_usd` is **$6.00**, so **$9 of the balance is unspendable** whatever a bug does, and a new per-run ceiling (`run_headroom: 1.25`) keeps any single run within 1.25× *its own* estimate even when the lifetime cap has room — the "if it can be done for $2, never spend $2.20+" rule made mechanical. An early stop costs a re-invocation, not money, because bought cells are skipped for free.
 - `2026-07-26` — **Runner, cost cap and pilot built. $0 spent.** `config/experiment.yaml` (the caps finally have a home), `carr/experiment.py` (stratified sampling, fixed seed), `carr/runner.py` (the paid loop) and `scripts/pilot.py`. **The cap aborts before spending, on worst case, against lifetime DB spend** — 16 tests in `tests/test_runner.py` prove it, including that a zero-headroom cap buys literally nothing and that a mid-run stop is resumable. Pilot priced at **expected $0.29 / worst case $2.37** over 15 stratified problems × 10 configs. ⚠️ **Latent bug found and fixed: `request_hash` did not include `problem_id`,** so two problems sharing a prompt would collide and the second would silently get no row, no result and no routing label. Zero collisions in the current 717-problem pool, so it was invisible rather than harmful — now closed, with the 10 existing rows migrated in place rather than re-bought.
 - `2026-07-26` — **LiveCodeBench loaded — the hard tier exists. $0 spent.** `carr/benchmarks/livecodebench.py` (download + cache + decode) and a second grading path in `verify.py`, because LCB shares nothing with evalplus: 112 problems are stdin→stdout programs, 63 are methods on a `Solution` class, and **LCB ships no canonical solutions at all**. Pool is now **717 problems**; 80 of the 175 LCB problems are `hard`. ⚠️ **Two findings.** (1) **LCB is not contamination-controlled for us** — its newest problem is 2025-04-06, the dataset stopped updating 2025-06-05, and every model on the roster is a 2026 release. It enters as a *difficulty* tier only; `release_date` is stored so exposure can be reported. The proposal's contamination claim is now wrong (§14). (2) With no canonical solutions there is nothing to run through the grader as known-good, so `tests/test_verify_lcb.py` uses **hand-written reference solutions** for both styles — the only thing standing between us and an LCB version of the macOS `setrlimit` bug. 11 LCB tests pass; the references score 43/43 and 34/34.
@@ -641,6 +642,7 @@ We never author problems. But nobody has published our table, because nobody has
 | [LLMRouterBench](https://arxiv.org/html/2601.07206v1) | 33 models, 21 datasets, 400k instances, released. **Explicitly no effort axis** | $0 prototyping; cite as the model-only baseline |
 | [HRBench](https://github.com/usail-hkust/HRBench) | 6 models × 5 benchmarks incl. code, 12 switching settings, data + code released | Free comparison point — **and a novelty threat, see 15.3** |
 | EmbedLLM | Per-question model correctness vectors | The RQ5 held-out-model mechanism |
+| **[CodeRouterBench](https://huggingface.co/datasets/Lance1573/CodeRouterBench)** (Jun 2026, MIT, ungated) | **9,999 code tasks × 8 models = 79,992 rows** with `score`, `cost_usd`, input/output tokens, latency. 9 task dimensions; sources include LCB, BigCodeBench, MBPP, HumanEval, SWE-bench, DS-1000. Has its own OOD split (176 tasks) | **The best free prototyping target we have found** — code-specific, 2026, and shaped exactly like our own table. Build and debug `router/knn.py` against this for $0. **Also prior art: see 15.3** |
 
 > **Action (Week 6):** build and debug `router/knn.py` against RouterBench or HRBench data **while our own grid is still running**. Removes the Week 6–7 risk at zero cost.
 
@@ -654,8 +656,18 @@ The proposal cites RouteLLM (2025), Universal Routing (2025), Budget Guidance (2
 | [DART](https://arxiv.org/html/2606.23181v1) (Jun 2026) | "**Training-Free** Adaptive Thinking Budgets", text-only API access — our training-free, provider-agnostic angle |
 | [HRBench](https://arxiv.org/html/2605.28398v1) (May 2026) | 6 models × 5 benchmarks **including code**, 12 controlled switching settings — substantially covers RQ1–RQ3 |
 | [When Routing Collapses](https://arxiv.org/pdf/2602.03478) (Feb 2026) | Names our saturation risk (§11) as a published phenomenon: routers degenerating to always picking one model |
+| **[Agent-as-a-Router / CodeRouterBench](https://arxiv.org/abs/2606.22902) (Jun 2026)** | **The closest work yet, and it must be cited.** Routing for *coding* tasks, 8 backends, released task×model matrix with per-call cost. Nearest neighbour to RQ1–RQ4 |
 
-**What still survives.** DART must *generate draft answers* to route, so it is not pre-inference and it costs tokens. RTR appears to require training. Neither is feature-only. The defensible niche is narrower but real:
+**What CodeRouterBench does NOT have — checked against the released data, 2026-07-26.** Its `model` column holds eight *model names* and nothing else: `claude-opus-4-6`, `claude-sonnet-4-6`, `gpt-5.4`, `glm-5`, `kimi-k2.5`, `MiniMax-M2.7`, `Qwen3-Max`, `qwen3.5-plus`.
+
+1. **No effort axis at all.** One row per (task, model). No thinking-mode dimension, so no model appears twice at different reasoning budgets. Our whole effort axis is absent.
+2. **No reasoning-token column.** Columns are `input_tokens`, `output_tokens`, `total_tokens` — the field Day 1 showed carries 95% of a thinking call's cost is simply not recorded.
+3. **Closed-weight backends**, where our roster is open-weight.
+4. **Their router is trained** — the release ships a LoRA adapter (`acrouter-qwen35-08b-router-lora`).
+
+So the nearest 2026 work sharpens our claim rather than displacing it: they route *between models*, we route *between (model × thinking-mode) pairs*, training-free, with reasoning tokens priced.
+
+**What still survives.** DART must *generate draft answers* to route, so it is not pre-inference and it costs tokens. RTR appears to require training. CodeRouterBench has no effort axis and no reasoning-token accounting. None is feature-only over the joint axis. The defensible niche is narrower but real:
 
 > **The cheapest possible router — no forward pass, no drafts, no hidden states, no training — evaluated on code, jointly over model and effort.**
 
@@ -667,6 +679,8 @@ A "how far can a nearly-free router get?" claim, benchmarked against **DART and 
 - [ ] Read **HRBench** and **Route-To-Reason** in full — they decide how much re-positioning is needed
 - [ ] Check whether RTR is genuinely training-based (if so, our training-free angle holds)
 - [ ] Check whether HRBench does *joint* model+effort or effort-switching per model
+- [ ] **Read Agent-as-a-Router ([arXiv 2606.22902](https://arxiv.org/abs/2606.22902)) in full** — closest prior art, June 2026, and its data is free
+- [ ] Prototype `router/knn.py` on CodeRouterBench while our own grid runs (§15.2)
 - [ ] **Raise with the advisor** — a stale gap analysis is what gets flagged at defense
 
 ---
