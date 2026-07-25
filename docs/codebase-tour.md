@@ -521,16 +521,20 @@ Honest gaps, in priority order:
 
 Built since this tour was first written (2026-07-26): **`carr/db.py`**
 (schema, `request_hash` dedup, read helpers), **`carr/extract.py`**,
-**`carr/cost.py`**, **`carr/effort.py`**, **`carr/providers/{base,echo}.py`**,
-and the two viewers `scripts/view.py` + `scripts/make_viewer.py`. The whole
-chain runs end to end — against a mock provider, for $0.
+**`carr/cost.py`**, **`carr/effort.py`**, **`carr/providers/base.py`**,
+**`scripts/init_db.py`**, **`scripts/studio.py`** and **`scripts/view.py`**.
+
+The chain was proven end to end against a mock provider, and then the mock was
+deleted — it had done its job. `data/carr.sqlite` now holds only real, free
+data: 542 problems and 9 configs. `generations` and `results` are **empty on
+purpose**; the only way to fill them is to buy the rows.
 
 Honest gaps, in priority order:
 
 | Missing | Why it matters |
 |---|---|
 | **`carr/providers/openrouter.py`** | **The only thing between here and real data.** API calls still exist only inside `day1_hello.py`. Implement the `Provider` contract in `providers/base.py` and swap it for `echo` |
-| **`carr/runner.py`** | The loop. `seed_mock.py` is a working sketch of it — it already does dedup and cheapest-first ordering — but it lacks a cost cap that *aborts* |
+| **`carr/runner.py`** | The loop. Needs `request_hash` dedup (built, in `carr/db.py`), cheapest-first ordering (built, in `carr/effort.py`) and a cost cap that *aborts* (not built) |
 | **LiveCodeBench loader** | **The hard tier.** RQ4 is at risk of a degenerate result without it. Largest scientific gap in the repo |
 | **`config/experiment.yaml`** | The `$50` hard cap that THESIS.md §9 says lives here has no file to live in yet |
 | **`carr/features.py`** | CARR's inputs. `problems.n_tests` and `prompt_chars` are already stored for it |
@@ -543,13 +547,25 @@ producing wrong numbers — which is the right order to build in.
 ## How to look at the data right now
 
 ```bash
-uv run python scripts/seed_mock.py     # $0, no network
-uv run python scripts/view.py --list
-uv run python scripts/view.py HumanEval/0
-uv run python scripts/make_viewer.py && open data/viewer.html
+uv run python scripts/init_db.py    # 542 problems + 9 configs, free
+uv run python scripts/studio.py     # browser, http://127.0.0.1:8787
+uv run python scripts/view.py --list   # terminal
 ```
 
-The mock rows are fake responses graded by the **real** grader, so what you are
-looking at is the true shape of every column — and the seeder asserts that every
-canonical solution it feeds through comes back PASS, which is a mass-scale
-version of `test_canonical_solutions_pass`.
+**Studio** reads the schema out of SQLite at request time — table list, column
+names and types, primary keys, and which tables reference which — so it is not
+tied to CARR's schema and will keep working when `features` and `router_runs`
+are added. It does sort, search, pagination, a read-only SQL console, and row
+editing and deletion.
+
+It is a small stdlib server rather than a static page because a `file://` page
+cannot write to SQLite. Two guards, since `generations` rows cost money:
+
+* the whole database is snapshotted to `data/backups/` before the first write
+  of each session, so nothing done in the UI is unrecoverable;
+* the SQL console runs on a read-only connection and accepts one
+  SELECT / WITH / EXPLAIN / PRAGMA at a time.
+
+`scripts/view.py` stays for the CARR-specific question studio cannot express in
+a grid: one problem across all nine configs, ending with the cheapest config
+that solved it — the routing label itself.

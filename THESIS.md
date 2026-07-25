@@ -16,10 +16,11 @@
 | **Stage** | Week 1 — Days 1–3 ✅, **Day 4 chain + Day 5 schema built and proven on mock data**. Only the paid API call is still missing. |
 | **Next action** | **Day 4 (real):** write `carr/providers/openrouter.py` to the `Provider` contract in `carr/providers/base.py` and swap it for `echo` in the runner. Then **the pilot** — which gates grid size. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
 | **Spend to date** | ~$0.001 of **$4.00 loaded** ($50 ceiling) |
-| **Rows in dataset** | 0 real of ~2,700 (300 problems × 9 configs — final count set by the pilot). **360 mock rows** seeded for inspection (`is_mock = 1`, excluded from every result). Problem pools loaded: HumanEval+ 164, MBPP+ 378 |
+| **Rows in dataset** | **0 of ~2,700** (300 problems × 9 configs — final count set by the pilot). `data/carr.sqlite` holds the real, free half: **542 problems + 9 configs**. `generations` and `results` are empty and stay that way until the pilot buys them |
 | **Blocked on** | Nothing. Advisor conversation runs in parallel, does not block the build |
 
 **Recent log**
+- `2026-07-26` — **Mock data removed; `scripts/studio.py` added.** All 360 seeded rows deleted, along with `seed_mock.py`, `make_viewer.py` and `providers/echo.py` — they had done their job (proving the chain and the dedup) and keeping fake rows next to real ones is a hazard. `scripts/init_db.py` now builds the database from real, free sources only: **542 problems** from evalplus + **9 configs** from the roster, with `generations`/`results` deliberately empty. Studio is a local SQLite browser (stdlib only, loopback only) with sort, search, pagination, a read-only SQL console, and row edit/delete. It introspects the schema per request, so it adapts to whatever the file contains. **Every write snapshots the database to `data/backups/` first** — verified by deleting 2 rows and confirming the snapshot still held 542. `--read-only` disables writing.
 - `2026-07-26` — **Pipeline made visible, on mock data, for $0.** Built `carr/{effort,db,extract,cost}.py` + `carr/providers/{base,echo}.py`, so the whole chain (problem → prompt → response → extract → grade → row) runs end to end with `EchoProvider` standing in for the API. Two viewers: `scripts/view.py` (terminal) and `scripts/make_viewer.py` → a self-contained `data/viewer.html`. **`request_hash` dedup proven working** — a re-run inserts 0 rows, so a crashed grid restart is free. **Three real bugs caught before any money was spent:** (1) `scripts/inspect.py` shadowed the stdlib `inspect` module and broke every script in `scripts/` → renamed `view.py`; (2) the echo provider's fallback mutation appended an *unreachable* `return None`, so rows labelled as failures graded PASS → now shadows the entry point; (3) `docs/codebase-tour.md`'s "$3.61" grid cost was not reproducible from the script — the real cause was `--in-tokens 600`, a pre-Day-2 guess, now defaulted to the measured 100. Roster re-verified live: all 5 slugs exist, prices match, `reasoning` supported. **`scripts/verify_roster.py` now exists** — four docs referenced it and it never had.
 - `2026-07-25` — Proposal analysed. GLM dropped from roster. Decisions locked (§12). Master doc created.
 - `2026-07-25` — Day 1 scaffold: `uv` project on **Python 3.12.13** (system 3.14.3 avoided), `git init`, `openai` + `python-dotenv` installed, `.env` gitignored, `scripts/day1_hello.py` written. Verified working. Waiting on the key to make the first call.
@@ -116,10 +117,10 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 | ✅ | 1 | Toolchain + one API call | **Done.** Key verified; 412 completion tokens of which **392 were reasoning** |
 | ✅ | 2 | Load real benchmark problems | **Done.** `scripts/day2_inspect_problems.py`; full contract in [docs/data-spec.md](docs/data-spec.md) |
 | ✅ | 3 | Sandboxed grader | **Done.** 8/8 tests pass incl. canonical solutions, infinite loop, hostile `os.system` |
-| 🟨 | 4 | Connect the pieces | **Chain built and running on mock data** — `scripts/view.py` prints the row. Remaining: the real `carr/providers/openrouter.py` |
-| 🟨 | 5 | Save to SQLite | **Schema + dedup done and tested** (`carr/db.py`, `tests/test_db.py`). 360 mock rows queryable; 0 paid rows yet |
+| 🟨 | 4 | Connect the pieces | Chain proven end to end against a mock backend, then the mock was removed. **Remaining: `carr/providers/openrouter.py`** — the one piece between here and real data |
+| ✅ | 5 | Save to SQLite | **Done.** `carr/db.py` schema + dedup, tested; `scripts/init_db.py` loads 542 problems + 9 configs. Empty grid is the correct state |
 | ✅ | 5 | Roster verification | **Done early**, and `scripts/verify_roster.py` now makes it repeatable |
-| ✅ | — | See the data | **Done.** `scripts/view.py` (terminal) and `data/viewer.html` (browser, self-contained) |
+| ✅ | — | See the data | **Done.** `scripts/studio.py` (browser, any schema, edit/delete) and `scripts/view.py` (terminal, CARR-specific) |
 
 ### Weeks 2–12
 | | Week | Milestone | Spend |
@@ -211,8 +212,7 @@ thesis/
 │   ├── db.py                ✅ # schema + idempotent upsert + read helpers
 │   ├── providers/
 │   │   ├── base.py          ✅ # the Provider contract: Generation, Usage
-│   │   ├── openrouter.py       # the only real adapter — NOT WRITTEN YET
-│   │   └── echo.py          ✅ # fake provider — exercises the pipeline at $0
+│   │   └── openrouter.py       # the only real adapter — NOT WRITTEN YET
 │   ├── effort.py            ✅ # models.yaml → the 9 configs, cheapest first
 │   ├── extract.py           ✅ # raw response → runnable Python
 │   ├── cost.py              ✅ # tokens → USD (reasoning ⊂ completion, never added twice)
@@ -233,14 +233,15 @@ thesis/
 │   ├── day2_inspect_problems.py ✅ # what a benchmark problem actually is
 │   ├── estimate_cost.py     ✅ # price the grid before running it
 │   ├── verify_roster.py     ✅ # roster vs live /models — free, exits non-zero on drift
-│   ├── seed_mock.py         ✅ # fill the DB with $0 mock rows, graded for real
+│   ├── init_db.py           ✅ # build the DB from evalplus + the roster (real, free)
+│   ├── studio.py            ✅ # local DB browser: any schema, SQL console, edit/delete
+│   ├── studio.html          ✅ # its UI — served by studio.py, not opened directly
 │   ├── view.py              ✅ # terminal viewer  (NOT inspect.py — shadows the stdlib)
-│   ├── make_viewer.py       ✅ # → data/viewer.html, self-contained
 │   ├── pilot.py                # NOT WRITTEN YET
 │   └── run_grid.py             # NOT WRITTEN YET
 ├── data/
 │   ├── carr.sqlite          ✅ # gitignored. THE scientific asset — back it up
-│   └── viewer.html          ✅ # gitignored, regenerated, never hand-edited
+│   └── backups/             ✅ # gitignored. Auto-snapshot before any studio write
 └── tests/
     ├── test_verify.py       ✅ # 8 tests — the grader must be right
     ├── test_extract.py      ✅ # 11 tests — extraction must never raise or invent
@@ -299,7 +300,7 @@ built, and the code won each time:
 
 **Five design decisions that matter:**
 
-- **`is_mock`** — every analysis query must filter `is_mock = 0`. `db.summary()` reports real spend with that filter applied, so a mock row can never inflate a cost number. `mock_mode` records which fixture shape produced the row, which is what lets the seeder assert that every *canonical* row graded PASS.
+- **`is_mock`** — every analysis query must filter `is_mock = 0`. `db.summary()` reports real spend with that filter applied, so a non-purchased row can never inflate a cost number. `mock_mode` traces a synthetic row back to whatever produced it. Nothing writes these today; they stay because the failure they prevent is invisible once it happens.
 
 - **`request_hash UNIQUE`** over `(model, effort, prompt, params)`. Checked before every API call; if present, skip. Crash at row 3,000 and restarting costs **$0** for the first 3,000. Every generation is money — never pay twice.
 - **`effort_mechanism`** is a column, not a comment. Native thinking-modes and prompt budget-forcing are *not* equivalent (proposal §8 says so). Results must split by mechanism or the effort axis is confounded.
@@ -449,9 +450,10 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 | Effort control differs across models | `effort_mechanism` logged as a variable; report split by mechanism |
 | CARR shows no gain | RQ1–RQ3 stand alone (proposal §8 already says this). The gap decomposition turns a null result into a diagnostic one |
 | Generated code damages your machine | evalplus `untrusted_check` (subprocess + `reliability_guard`), tested Day 3 — **not Docker**, which was reversed on Day 3. Note evalplus's own docstring says it "is NOT a security sandbox": it contains accidents and casual hostility, not a determined adversary |
-| **A silent grader or extractor bug corrupts every number** | `test_canonical_solutions_pass` (3 problems) plus `seed_mock.py`'s canonical assertion (every seeded problem, both benchmarks) — a reference solution that fails means the harness is broken, not the model. This is what caught the macOS `setrlimit` bug |
-| Paying twice for the same generation | `request_hash UNIQUE`, **proven working** by `tests/test_db.py` and by re-running `seed_mock.py` (0 rows inserted) |
-| Mock/fixture rows leaking into results | `generations.is_mock`; `db.summary()` computes spend with `is_mock = 0` |
+| **A silent grader or extractor bug corrupts every number** | `test_canonical_solutions_pass` — a reference solution that fails means the harness is broken, not the model. This is what caught the macOS `setrlimit` bug. It has also been run at scale (210 canonical solutions, both benchmarks, all PASS) before the fixture was retired |
+| Paying twice for the same generation | `request_hash UNIQUE`, **proven working** by `tests/test_db.py` and by a 360-row re-run that inserted 0 |
+| Non-purchased rows leaking into results | `generations.is_mock`; `db.summary()` computes spend with `is_mock = 0`. `init_db.py --reset` refuses to run when paid rows exist |
+| **Losing the database to a careless edit** | `scripts/studio.py` snapshots the whole file to `data/backups/` before its first write of each session, and its SQL console is on a read-only connection. `--read-only` disables writing entirely |
 | Python 3.14 breaks dependencies | Pin 3.12 on Day 1 |
 | **Novelty erosion** — 2026 work (HRBench, Route-To-Reason, DART) already occupies much of the claimed gap | Re-position to the *cheapest-possible-router* claim (§15.3); benchmark against DART/RTR rather than RouteLLM; read those papers before writing more. **The empirical table remains ours regardless** |
 
@@ -484,6 +486,10 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 | 2026-07-26 | Terminal viewer named `view.py`, **not** `inspect.py` | A script named `inspect.py` shadows the stdlib module for every other script in `scripts/`, and it broke the seeding run silently |
 | 2026-07-26 | `--in-tokens` default 600 → **100** | 600 was a pre-Day-2 guess; Day 2 measured medians of 99 (HE+) and 36 (MBPP+). Two docs carried mutually inconsistent grid costs derived from the two values. Grid is **$3.55**, single-sourced from the script |
 | 2026-07-26 | Exact prices in the roster (`0.0938/0.1876`) rather than rounded | `cost_computed_usd` is compared against `cost_actual_usd` to detect silent price drift; a 0.2% rounding error would read as permanent drift |
+| 2026-07-26 | **Mock rows and the mock machinery deleted once they had paid for themselves** | They proved the chain, the dedup and the grader across 542 problems. Keeping fake rows beside real ones in the scientific asset is a standing hazard, and `is_mock` is a guard against a mistake that no longer needs to be possible. Recoverable from commit `f3da6ff` if offline runner tests are wanted later |
+| 2026-07-26 | Studio is a **local server**, not a static page | A `file://` page cannot write to SQLite, and the ask was to edit and delete rows. Stdlib `http.server`, loopback only, no auth and no new dependency |
+| 2026-07-26 | **Auto-snapshot before every write**, and a read-only SQL console | `generations` cannot be rebuilt without paying again, so a delete button on it needs an undo. `data/backups/` keeps the last 10 |
+| 2026-07-26 | Studio introspects the schema per request rather than hardcoding CARR's tables | The schema will change when `features` and `router_runs` land, and a browser that needs editing every time the schema moves would simply not be used |
 | 2026-07-26 | `scripts/verify_roster.py` finally written | Four files instructed the reader to run it and it had never existed — the roster was verified by hand and only the result committed. §9 requires re-verification before the grid, which needs a script that exists |
 
 ---

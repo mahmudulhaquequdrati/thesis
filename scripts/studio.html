@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CARR studio</title>
+<style>
+:root {
+  --accent:#3ecf8e; --accent-dim:#2aa871;
+  --bg:#f8f9fa; --panel:#fff; --panel-2:#f1f3f5; --line:#e4e7eb;
+  --fg:#11181c; --dim:#687076; --faint:#889096;
+  --danger:#e5484d; --warn:#f5a524; --code:#f6f8fa;
+  --row-hover:#f5f7f9; --row-sel:#e8f8f0;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#1c1c1c; --panel:#181818; --panel-2:#232323; --line:#2e2e2e;
+    --fg:#ededed; --dim:#a0a0a0; --faint:#707070; --code:#141414;
+    --row-hover:#202020; --row-sel:#12281f; }
+}
+* { box-sizing:border-box; }
+html,body { height:100%; }
+body { margin:0; background:var(--bg); color:var(--fg); overflow:hidden;
+  font:13px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
+.mono,code,pre,td,th,input,textarea { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+button { font:inherit; color:inherit; background:none; border:0; cursor:pointer; }
+::-webkit-scrollbar { width:10px; height:10px; }
+::-webkit-scrollbar-thumb { background:var(--line); border-radius:5px; }
+
+/* ---------------------------------------------------------------- shell */
+.app { display:grid; grid-template-rows:48px 1fr; height:100vh; }
+.top { display:flex; align-items:center; gap:14px; padding:0 14px;
+  border-bottom:1px solid var(--line); background:var(--panel); }
+.brand { display:flex; align-items:center; gap:8px; font-weight:600; }
+.dot { width:9px; height:9px; border-radius:50%; background:var(--accent); }
+.top .path { color:var(--dim); font-size:11.5px; }
+.top .right { margin-left:auto; display:flex; align-items:center; gap:10px;
+  color:var(--dim); font-size:11.5px; }
+.pill { border:1px solid var(--line); border-radius:20px; padding:2px 9px;
+  font-size:11px; color:var(--dim); }
+.pill.ro { border-color:var(--warn); color:var(--warn); }
+
+.body { display:grid; grid-template-columns:212px 1fr; min-height:0; }
+nav { border-right:1px solid var(--line); background:var(--panel);
+  overflow-y:auto; padding:10px 0; }
+.navhead { font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--faint); padding:8px 14px 5px; font-weight:600; }
+.navitem { display:flex; justify-content:space-between; align-items:center;
+  gap:8px; padding:6px 14px; cursor:pointer; border-left:2px solid transparent; }
+.navitem:hover { background:var(--panel-2); }
+.navitem.on { background:var(--row-sel); border-left-color:var(--accent);
+  font-weight:600; }
+.navitem .n { color:var(--faint); font-size:11px; }
+.navitem.costly .name::after { content:"$"; color:var(--warn);
+  font-size:10px; margin-left:5px; vertical-align:super; }
+
+main { display:grid; grid-template-rows:auto 1fr auto; min-width:0; min-height:0; }
+
+/* -------------------------------------------------------------- toolbar */
+.tools { display:flex; align-items:center; gap:9px; padding:9px 14px;
+  border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+.tools h2 { margin:0; font-size:14px; font-weight:600; }
+.tools .meta { color:var(--dim); font-size:11.5px; }
+.spacer { margin-left:auto; }
+input[type=search], input[type=text], textarea, select {
+  background:var(--bg); color:var(--fg); border:1px solid var(--line);
+  border-radius:6px; padding:5px 9px; font-size:12px; outline:none; }
+input:focus, textarea:focus, select:focus { border-color:var(--accent); }
+.btn { border:1px solid var(--line); border-radius:6px; padding:5px 11px;
+  font-size:12px; background:var(--panel); }
+.btn:hover { background:var(--panel-2); }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:#04240f;
+  font-weight:600; }
+.btn.primary:hover { background:var(--accent-dim); }
+.btn.danger { border-color:var(--danger); color:var(--danger); }
+.btn.danger:hover { background:var(--danger); color:#fff; }
+
+/* ----------------------------------------------------------------- grid */
+.grid { overflow:auto; min-height:0; background:var(--panel); }
+table { border-collapse:separate; border-spacing:0; width:max-content;
+  min-width:100%; font-size:12px; }
+thead th { position:sticky; top:0; z-index:2; background:var(--panel-2);
+  border-bottom:1px solid var(--line); border-right:1px solid var(--line);
+  padding:0; text-align:left; white-space:nowrap; }
+thead th button { width:100%; padding:7px 10px; display:flex; gap:6px;
+  align-items:center; font-size:11px; font-weight:600; }
+thead th .ty { color:var(--faint); font-weight:400; font-size:10px; }
+thead th .ar { color:var(--accent); }
+tbody td { border-bottom:1px solid var(--line); border-right:1px solid var(--line);
+  padding:6px 10px; max-width:340px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+tbody tr:hover td { background:var(--row-hover); }
+tbody tr.on td { background:var(--row-sel); }
+td.null, .null { color:var(--faint); font-style:italic; }
+.chk { width:34px; text-align:center; padding:0 !important; }
+.chk input { cursor:pointer; }
+.pk { color:var(--accent); }
+.empty { padding:46px 20px; text-align:center; color:var(--dim); }
+.empty h3 { margin:0 0 6px; font-size:14px; color:var(--fg); }
+.empty code { background:var(--code); padding:2px 7px; border-radius:4px; }
+
+/* ----------------------------------------------------------- pagination */
+.foot { display:flex; align-items:center; gap:10px; padding:7px 14px;
+  border-top:1px solid var(--line); background:var(--panel);
+  color:var(--dim); font-size:11.5px; }
+
+/* --------------------------------------------------------------- drawer */
+.drawer { position:fixed; top:0; right:0; bottom:0; width:min(560px,92vw);
+  background:var(--panel); border-left:1px solid var(--line); z-index:20;
+  transform:translateX(101%); transition:transform .16s ease;
+  display:flex; flex-direction:column; box-shadow:-14px 0 40px rgba(0,0,0,.12); }
+.drawer.open { transform:none; }
+.drawer header { display:flex; align-items:center; gap:10px; padding:11px 14px;
+  border-bottom:1px solid var(--line); }
+.drawer header h3 { margin:0; font-size:13px; }
+.drawer .fields { overflow-y:auto; padding:12px 14px; flex:1; }
+.field { margin-bottom:13px; }
+.field label { display:block; font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--faint); margin-bottom:3px; font-weight:600; }
+.field label .ty { text-transform:none; letter-spacing:0; color:var(--faint);
+  font-weight:400; }
+.field textarea { width:100%; min-height:34px; resize:vertical; line-height:1.45; }
+.field textarea[readonly] { background:var(--code); color:var(--dim); }
+.field textarea.tall { min-height:190px; }
+.drawer footer { padding:11px 14px; border-top:1px solid var(--line);
+  display:flex; gap:9px; align-items:center; }
+.scrim { position:fixed; inset:0; background:rgba(0,0,0,.32); z-index:15;
+  opacity:0; pointer-events:none; transition:opacity .16s; }
+.scrim.on { opacity:1; pointer-events:auto; }
+
+/* ---------------------------------------------------------------- modal */
+.modal { position:fixed; inset:0; z-index:40; display:none;
+  align-items:center; justify-content:center; background:rgba(0,0,0,.45); }
+.modal.on { display:flex; }
+.modal .box { background:var(--panel); border:1px solid var(--line);
+  border-radius:10px; width:min(470px,92vw); padding:18px; }
+.modal h3 { margin:0 0 9px; font-size:15px; }
+.modal p { margin:0 0 11px; color:var(--dim); font-size:12.5px; }
+.modal .warn { border-left:3px solid var(--warn); padding-left:11px;
+  color:var(--fg); }
+.modal .row { display:flex; gap:9px; justify-content:flex-end; margin-top:15px; }
+.modal label.cb { display:flex; gap:7px; align-items:center; color:var(--dim);
+  font-size:12.5px; margin-bottom:9px; }
+
+/* ------------------------------------------------------------------ sql */
+.sql { display:none; grid-template-rows:auto 1fr; min-height:0; }
+.sql.on { display:grid; }
+.sql .editor { padding:12px 14px; border-bottom:1px solid var(--line);
+  background:var(--panel); }
+.sql textarea { width:100%; min-height:112px; resize:vertical; font-size:12.5px; }
+.sql .bar { display:flex; gap:9px; align-items:center; margin-top:9px; }
+.hint { color:var(--faint); font-size:11.5px; }
+.err { color:var(--danger); font-size:12px; padding:9px 14px; }
+.toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+  background:var(--fg); color:var(--bg); padding:9px 16px; border-radius:7px;
+  font-size:12.5px; z-index:60; opacity:0; transition:opacity .2s;
+  pointer-events:none; max-width:80vw; }
+.toast.on { opacity:1; }
+</style></head><body>
+
+<div class="app">
+  <div class="top">
+    <div class="brand"><span class="dot"></span> CARR studio</div>
+    <span class="path mono" id="dbpath"></span>
+    <div class="right">
+      <span id="dbsize"></span>
+      <span class="pill" id="romode" hidden>read-only</span>
+      <button class="btn" id="refresh">Refresh</button>
+    </div>
+  </div>
+
+  <div class="body">
+    <nav>
+      <div class="navhead">Tables</div>
+      <div id="tablelist"></div>
+      <div class="navhead" style="margin-top:10px">Tools</div>
+      <div class="navitem" id="navsql"><span class="name">SQL console</span></div>
+    </nav>
+
+    <main id="dataview">
+      <div class="tools">
+        <h2 id="tname">—</h2>
+        <span class="meta" id="tmeta"></span>
+        <span class="spacer"></span>
+        <input type="search" id="search" placeholder="Search all columns..." style="width:210px">
+        <button class="btn danger" id="del" disabled>Delete</button>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="foot">
+        <span id="rangelbl"></span>
+        <span class="spacer"></span>
+        <label class="hint">Rows
+          <select id="pagesize">
+            <option>25</option><option selected>50</option>
+            <option>100</option><option>250</option>
+          </select>
+        </label>
+        <button class="btn" id="prev">Prev</button>
+        <button class="btn" id="next">Next</button>
+      </div>
+    </main>
+
+    <main class="sql" id="sqlview">
+      <div class="editor">
+        <textarea id="sqltext" spellcheck="false"
+          placeholder="SELECT problem_id, MIN(cost_computed_usd) FROM generations JOIN results USING (gen_id) WHERE passed = 1 GROUP BY problem_id;"></textarea>
+        <div class="bar">
+          <button class="btn primary" id="run">Run</button>
+          <span class="hint">Read-only connection. One SELECT / WITH / EXPLAIN / PRAGMA at a time. First 1,000 rows.</span>
+        </div>
+        <div class="err" id="sqlerr" hidden></div>
+      </div>
+      <div class="grid" id="sqlgrid"></div>
+    </main>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <header>
+    <h3 id="drawertitle">Row</h3>
+    <span class="spacer" style="margin-left:auto"></span>
+    <button class="btn" id="drawerclose">Close</button>
+  </header>
+  <div class="fields" id="drawerfields"></div>
+  <footer>
+    <button class="btn primary" id="save">Save changes</button>
+    <button class="btn danger" id="delone">Delete row</button>
+    <span class="hint" id="savehint"></span>
+  </footer>
+</aside>
+
+<div class="modal" id="modal"><div class="box">
+  <h3 id="modaltitle">Delete rows?</h3>
+  <div id="modalbody"></div>
+  <label class="cb"><input type="checkbox" id="cascade">
+    Also delete rows in other tables that reference these</label>
+  <div class="row">
+    <button class="btn" id="cancel">Cancel</button>
+    <button class="btn danger" id="confirm">Delete</button>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const S = { schema:null, table:null, key:'rowid', cols:[], rows:[],
+            sel:new Set(), sort:'', dir:'asc', offset:0, limit:50,
+            total:0, q:'', row:null };
+
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const post = (path, body) => api(path, {
+  method:'POST', headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(body)});
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 3200);
+}
+const bytes = n => n > 1048576 ? (n/1048576).toFixed(1)+' MB' : (n/1024).toFixed(0)+' KB';
+
+/* ------------------------------------------------------------- schema */
+async function loadSchema() {
+  S.schema = await api('/api/schema');
+  $('#dbpath').textContent = S.schema.db_path;
+  $('#dbsize').textContent = bytes(S.schema.db_bytes);
+  $('#romode').hidden = !S.schema.read_only;
+  if (S.schema.read_only) { $('#del').disabled = true; }
+
+  $('#tablelist').innerHTML = S.schema.tables.map(t => `
+    <div class="navitem ${t.costly?'costly':''} ${t.name===S.table?'on':''}" data-t="${esc(t.name)}">
+      <span class="name">${esc(t.name)}</span>
+      <span class="n">${t.rows.toLocaleString()}</span>
+    </div>`).join('');
+  $('#tablelist').querySelectorAll('[data-t]').forEach(el =>
+    el.onclick = () => selectTable(el.dataset.t));
+
+  if (!S.table && S.schema.tables.length) selectTable(S.schema.tables[0].name);
+}
+
+function tableInfo(name) { return S.schema.tables.find(t => t.name === name); }
+
+function selectTable(name) {
+  S.table = name; S.offset = 0; S.sort = ''; S.dir = 'asc';
+  S.q = ''; $('#search').value = ''; S.sel.clear();
+  $('#sqlview').classList.remove('on'); $('#dataview').style.display = '';
+  $('#navsql').classList.remove('on');
+  document.querySelectorAll('#tablelist .navitem').forEach(el =>
+    el.classList.toggle('on', el.dataset.t === name));
+  loadRows();
+}
+
+/* --------------------------------------------------------------- rows */
+async function loadRows() {
+  const p = new URLSearchParams({table:S.table, limit:S.limit, offset:S.offset});
+  if (S.sort) { p.set('sort', S.sort); p.set('dir', S.dir); }
+  if (S.q) p.set('q', S.q);
+
+  let data;
+  try { data = await api('/api/rows?' + p); }
+  catch (e) { $('#grid').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+
+  S.cols = data.columns; S.key = data.key; S.rows = data.rows; S.total = data.total;
+  $('#tname').textContent = S.table;
+  const info = tableInfo(S.table);
+  $('#tmeta').textContent =
+    `${S.total.toLocaleString()} rows · ${S.cols.length} columns` +
+    (info?.costly ? ' · rows here cost money' : '');
+  renderGrid(); renderFoot(); syncDelete();
+}
+
+function cell(v) {
+  if (v === null || v === undefined) return '<span class="null">NULL</span>';
+  const s = String(v);
+  return `<span title="${esc(s.slice(0,600))}">${esc(s.length>200 ? s.slice(0,200)+'…' : s)}</span>`;
+}
+
+function renderGrid() {
+  if (!S.rows.length) {
+    const info = tableInfo(S.table);
+    $('#grid').innerHTML = `<div class="empty">
+      <h3>${S.q ? 'No rows match that search' : 'No rows yet'}</h3>
+      <p>${S.q ? 'Try a different term.' : emptyHint(info)}</p></div>`;
+    return;
+  }
+  const head = S.cols.map(c => `
+    <th><button data-sort="${esc(c.name)}">
+      <span class="${c.pk?'pk':''}">${esc(c.name)}</span>
+      <span class="ty">${esc(c.type)}${c.pk?' PK':''}</span>
+      <span class="ar">${S.sort===c.name ? (S.dir==='asc'?'▲':'▼') : ''}</span>
+    </button></th>`).join('');
+
+  const body = S.rows.map(r => {
+    const k = r[S.key];
+    return `<tr data-k="${esc(k)}" class="${S.sel.has(String(k))?'on':''}">
+      <td class="chk"><input type="checkbox" data-k="${esc(k)}"
+        ${S.sel.has(String(k))?'checked':''}></td>
+      ${S.cols.map(c => `<td class="${r[c.name]===null?'null':''}">${cell(r[c.name])}</td>`).join('')}
+    </tr>`;
+  }).join('');
+
+  $('#grid').innerHTML = `<table>
+    <thead><tr><th class="chk"><input type="checkbox" id="all"></th>${head}</tr></thead>
+    <tbody>${body}</tbody></table>`;
+
+  $('#grid').querySelectorAll('[data-sort]').forEach(b => b.onclick = () => {
+    if (S.sort === b.dataset.sort) S.dir = S.dir === 'asc' ? 'desc' : 'asc';
+    else { S.sort = b.dataset.sort; S.dir = 'asc'; }
+    S.offset = 0; loadRows();
+  });
+  $('#grid').querySelectorAll('tbody input[type=checkbox]').forEach(cb =>
+    cb.onclick = e => {
+      e.stopPropagation();
+      const k = cb.dataset.k;
+      cb.checked ? S.sel.add(k) : S.sel.delete(k);
+      cb.closest('tr').classList.toggle('on', cb.checked);
+      syncDelete();
+    });
+  const all = $('#all');
+  if (all) all.onclick = () => {
+    S.rows.forEach(r => all.checked ? S.sel.add(String(r[S.key]))
+                                    : S.sel.delete(String(r[S.key])));
+    renderGrid(); syncDelete();
+  };
+  $('#grid').querySelectorAll('tbody tr').forEach(tr =>
+    tr.onclick = () => openRow(tr.dataset.k));
+}
+
+function emptyHint(info) {
+  if (S.table === 'generations' || S.table === 'results')
+    return 'This is the money table — it fills only when the pilot buys rows. '
+         + 'Nothing is wrong.';
+  return 'Load it with <code>uv run python scripts/init_db.py</code>';
+}
+
+function renderFoot() {
+  const from = S.total ? S.offset + 1 : 0;
+  const to = Math.min(S.offset + S.limit, S.total);
+  $('#rangelbl').textContent = `${from.toLocaleString()}–${to.toLocaleString()} of ${S.total.toLocaleString()}`;
+  $('#prev').disabled = S.offset <= 0;
+  $('#next').disabled = S.offset + S.limit >= S.total;
+}
+
+function syncDelete() {
+  const n = S.sel.size;
+  $('#del').textContent = n ? `Delete ${n}` : 'Delete';
+  $('#del').disabled = !n || S.schema.read_only;
+}
+
+/* ------------------------------------------------------------- drawer */
+function openRow(k) {
+  const row = S.rows.find(r => String(r[S.key]) === String(k));
+  if (!row) return;
+  S.row = row;
+  $('#drawertitle').textContent = `${S.table} · ${S.key} = ${row[S.key]}`;
+  $('#drawerfields').innerHTML = S.cols.map(c => {
+    const v = row[c.name];
+    const long = v !== null && String(v).length > 90;
+    const locked = c.pk || S.schema.read_only;
+    return `<div class="field">
+      <label>${esc(c.name)} <span class="ty">${esc(c.type)}${c.pk?' · primary key':''}</span></label>
+      <textarea data-c="${esc(c.name)}" class="${long?'tall':''}"
+        ${locked?'readonly':''} spellcheck="false">${esc(v === null ? '' : v)}</textarea>
+    </div>`;
+  }).join('');
+  $('#save').disabled = S.schema.read_only;
+  $('#delone').disabled = S.schema.read_only;
+  $('#savehint').textContent = S.schema.read_only ? 'read-only mode' : '';
+  $('#drawer').classList.add('open'); $('#scrim').classList.add('on');
+}
+function closeDrawer() {
+  $('#drawer').classList.remove('open'); $('#scrim').classList.remove('on');
+  S.row = null;
+}
+
+$('#save').onclick = async () => {
+  if (!S.row) return;
+  const edits = [];
+  $('#drawerfields').querySelectorAll('textarea:not([readonly])').forEach(t => {
+    const orig = S.row[t.dataset.c];
+    const now = t.value;
+    if (String(orig === null ? '' : orig) !== now)
+      edits.push({column:t.dataset.c, value:now});
+  });
+  if (!edits.length) return toast('Nothing changed');
+  try {
+    for (const e of edits)
+      await post('/api/update',
+        {table:S.table, key:S.row[S.key], column:e.column, value:e.value});
+    toast(`Updated ${edits.length} field${edits.length>1?'s':''}`);
+    closeDrawer(); await loadRows(); await loadSchema();
+  } catch (e) { toast('Error: ' + e.message); }
+};
+
+$('#delone').onclick = () => {
+  if (!S.row) return;
+  askDelete([String(S.row[S.key])]);
+};
+
+/* ------------------------------------------------------------- delete */
+let pendingKeys = null;
+function askDelete(keys) {
+  pendingKeys = keys;
+  const info = tableInfo(S.table);
+  const deps = info?.dependents || [];
+  $('#modaltitle').textContent =
+    `Delete ${keys.length} row${keys.length>1?'s':''} from ${S.table}?`;
+  $('#modalbody').innerHTML = `
+    ${info?.costly ? `<p class="warn"><strong>These rows cost real money.</strong>
+       A generation cannot be rebuilt without buying it again. Consider editing
+       or filtering instead of deleting.</p>` : ''}
+    <p>The whole database is snapshotted to <code>data/backups/</code> before
+       the first change of this session, so this is reversible.</p>
+    ${deps.length ? `<p>Referenced by: <code>${deps.map(esc).join('</code>, <code>')}</code>.</p>` : ''}`;
+  $('#cascade').checked = false;
+  $('#cascade').closest('label').style.display = deps.length ? '' : 'none';
+  $('#modal').classList.add('on');
+}
+$('#cancel').onclick = () => { $('#modal').classList.remove('on'); pendingKeys = null; };
+$('#confirm').onclick = async () => {
+  if (!pendingKeys) return;
+  try {
+    const r = await post('/api/delete',
+      {table:S.table, keys:pendingKeys, cascade:$('#cascade').checked});
+    const kids = Object.entries(r.children||{})
+      .map(([t,n]) => `${n} in ${t}`).join(', ');
+    toast(`Deleted ${r.deleted} row${r.deleted===1?'':'s'}`
+      + (kids ? ` (plus ${kids})` : '')
+      + (r.backup ? ' · backup written' : ''));
+    S.sel.clear(); closeDrawer();
+    await loadRows(); await loadSchema();
+  } catch (e) { toast('Error: ' + e.message); }
+  $('#modal').classList.remove('on'); pendingKeys = null;
+};
+$('#del').onclick = () => askDelete([...S.sel]);
+
+/* ---------------------------------------------------------------- sql */
+$('#navsql').onclick = () => {
+  $('#dataview').style.display = 'none';
+  $('#sqlview').classList.add('on');
+  $('#navsql').classList.add('on');
+  document.querySelectorAll('#tablelist .navitem').forEach(e => e.classList.remove('on'));
+};
+$('#run').onclick = async () => {
+  $('#sqlerr').hidden = true;
+  try {
+    const r = await post('/api/query', {sql:$('#sqltext').value});
+    if (!r.columns.length) { $('#sqlgrid').innerHTML =
+      '<div class="empty"><h3>No columns returned</h3></div>'; return; }
+    $('#sqlgrid').innerHTML = `<table>
+      <thead><tr>${r.columns.map(c=>`<th><button>${esc(c)}</button></th>`).join('')}</tr></thead>
+      <tbody>${r.rows.map(row=>`<tr>${row.map(v=>
+        `<td class="${v===null?'null':''}">${cell(v)}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>` + (r.truncated ? '<div class="err">Showing the first 1,000 rows.</div>' : '');
+    if (!r.rows.length) $('#sqlgrid').innerHTML =
+      '<div class="empty"><h3>Query ran, no rows matched</h3></div>';
+  } catch (e) {
+    $('#sqlerr').hidden = false; $('#sqlerr').textContent = e.message;
+  }
+};
+$('#sqltext').addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') $('#run').click();
+});
+
+/* ------------------------------------------------------------- wiring */
+let searchTimer;
+$('#search').oninput = e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { S.q = e.target.value; S.offset = 0; loadRows(); }, 220);
+};
+$('#prev').onclick = () => { S.offset = Math.max(0, S.offset - S.limit); loadRows(); };
+$('#next').onclick = () => { S.offset += S.limit; loadRows(); };
+$('#pagesize').onchange = e => { S.limit = +e.target.value; S.offset = 0; loadRows(); };
+$('#refresh').onclick = async () => { await loadSchema(); await loadRows(); toast('Refreshed'); };
+$('#drawerclose').onclick = closeDrawer;
+$('#scrim').onclick = closeDrawer;
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('#modal').classList.contains('on')) $('#cancel').click();
+  else closeDrawer();
+});
+
+loadSchema();
+</script></body></html>

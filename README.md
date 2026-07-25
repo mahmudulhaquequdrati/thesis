@@ -17,23 +17,32 @@ uv run python scripts/day1_hello.py
 
 ## See the data
 
-Everything below is **free and offline** — no API key, no network, no cost. The
-rows are mock generations produced by `carr/providers/echo.py`, but they are
-graded by the real grader, so the pipeline they exercise is the real one.
-
 ```bash
-uv run python scripts/seed_mock.py            # fill data/carr.sqlite ($0)
-uv run python scripts/view.py --list          # every problem, one line each
-uv run python scripts/view.py HumanEval/0     # all 9 configs for one problem
-uv run python scripts/view.py HumanEval/0 -c 3   # one cell: prompt → response → code → grade
-
-uv run python scripts/make_viewer.py          # → data/viewer.html
-open data/viewer.html                          # browse it, self-contained, no server
+uv run python scripts/init_db.py     # build data/carr.sqlite from evalplus + the roster
+uv run python scripts/studio.py      # browse it at http://127.0.0.1:8787
 ```
 
-Mock rows carry `is_mock = 1` and are excluded from every spend and result
-number. Re-running `seed_mock.py` inserts nothing: `request_hash` is UNIQUE, so
-a crashed run is free to restart.
+**Studio** is a local database browser — tables, columns, sorting, search,
+pagination, a read-only SQL console, and row editing and deletion. It reads the
+schema at request time, so it works on whatever the file contains; add a table
+and it appears. It binds to loopback only and uses nothing outside the standard
+library.
+
+Everything it can change is reversible: the whole database is snapshotted to
+`data/backups/` before the first write of each session. Start it with
+`--read-only` to disable writing entirely.
+
+For the CARR-specific view of one problem across all 9 configs, use the terminal:
+
+```bash
+uv run python scripts/view.py --list          # every problem, one line each
+uv run python scripts/view.py HumanEval/0     # all 9 configs side by side
+uv run python scripts/view.py HumanEval/0 -c 3   # prompt → response → code → grade
+```
+
+`init_db.py` loads only what is real and free: 542 problems from evalplus and
+the 9 verified configs. **`generations` and `results` start empty** — those rows
+cost money and only the pilot can fill them.
 
 Other free checks:
 
@@ -53,6 +62,6 @@ uv run pytest                                  # 32 tests
 | `docs/data-spec.md` | Exact contract: what we send, what we store, every column |
 | `Thesis_Project_Proposal.docx` | The submitted proposal (Revision 2) |
 | `scripts/` | Runnable entry points. **`view.py`, not `inspect.py`** — that name shadows the stdlib module and breaks every other script here |
-| `carr/` | The harness package. Built: `db`, `effort`, `extract`, `cost`, `execute/verify`, `providers/{base,echo}` |
+| `carr/` | The harness package. Built: `db`, `effort`, `extract`, `cost`, `execute/verify`, `providers/base` |
 | `config/` | Model roster, benchmarks, experiment grid — never hardcoded |
-| `data/` | `carr.sqlite`, the dataset. Gitignored; back it up separately. `viewer.html` is regenerated, never edited |
+| `data/` | `carr.sqlite`, the dataset. Gitignored; back it up separately. `backups/` holds automatic pre-write snapshots |
