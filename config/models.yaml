@@ -1,0 +1,114 @@
+# Model roster -- VERIFIED against OpenRouter's live /models endpoint.
+#
+# Prices are USD per million tokens, copied from the API on the snapshot date.
+# Regenerate with:  uv run python scripts/verify_roster.py
+#
+# Never hardcode a model id anywhere else in the codebase. The open-weight
+# landscape moves every 6-8 weeks; this file is the only place that knows.
+
+snapshot_date: "2026-07-25"
+verified_against: "https://openrouter.ai/api/v1/models"
+
+# Four models x two effort levels = 8 configs, plus one held-out model.
+# Pairing each model with itself at two effort levels keeps the effort axis
+# clean: the only thing that changes within a pair is the thinking mode.
+models:
+
+  - slug: qwen/qwen3.5-9b
+    family: qwen
+    role: cheapest tier -- the no-reasoning baseline and the floor of the frontier
+    price_in_per_m: 0.100
+    price_out_per_m: 0.150
+    context_length: 262144
+    supports_reasoning: true
+    efforts:
+      - label: "off"
+        mechanism: native_toggle
+        params: {reasoning: {enabled: false}}
+      - label: "high"
+        mechanism: native_toggle
+        params: {reasoning: {effort: "high"}}
+
+  - slug: deepseek/deepseek-v4-flash
+    family: deepseek
+    role: cost-efficient reasoner, mid tier
+    # Remarkably cheap for its tier -- cheaper per output token than
+    # qwen3.6-35b despite sitting higher on most leaderboards. Expect it to
+    # dominate a large stretch of the Pareto frontier.
+    price_in_per_m: 0.094
+    price_out_per_m: 0.188
+    context_length: 1048576
+    supports_reasoning: true
+    efforts:
+      - label: "off"
+        mechanism: native_toggle
+        params: {reasoning: {enabled: false}}
+      - label: "high"
+        mechanism: native_toggle
+        params: {reasoning: {effort: "high"}}
+
+  - slug: qwen/qwen3.6-35b-a3b
+    family: qwen
+    role: mid tier, permissive licence
+    price_in_per_m: 0.140
+    price_out_per_m: 1.000
+    context_length: 262144
+    supports_reasoning: true
+    efforts:
+      - label: "off"
+        mechanism: native_toggle
+        params: {reasoning: {enabled: false}}
+      - label: "high"
+        mechanism: native_toggle
+        params: {reasoning: {effort: "high"}}
+
+  - slug: deepseek/deepseek-v4-pro
+    family: deepseek
+    role: frontier open-weight reasoner, top tier
+    price_in_per_m: 0.435
+    price_out_per_m: 0.870
+    context_length: 1048576
+    supports_reasoning: true
+    efforts:
+      - label: "off"
+        mechanism: native_toggle
+        params: {reasoning: {enabled: false}}
+      - label: "high"
+        mechanism: native_toggle
+        params: {reasoning: {effort: "high"}}
+
+# Held out entirely from the CARR build set -- the RQ5 generalization test.
+# Kimi is the only non-DeepSeek/Qwen family in the roster, which makes it the
+# most genuinely out-of-distribution model available to us.
+#
+# Evaluated on a SUBSET of problems, not the full grid. RQ5 asks whether CARR
+# transfers to an unseen model; that does not require full coverage, and at
+# $2.72/M output the full grid would cost more than every other config combined.
+held_out:
+  - slug: moonshotai/kimi-k2.6
+    family: moonshot
+    role: RQ5 held-out model
+    price_in_per_m: 0.646
+    price_out_per_m: 2.720
+    context_length: 262144
+    supports_reasoning: true
+    subset_only: true
+    efforts:
+      - label: "high"
+        mechanism: native_toggle
+        params: {reasoning: {effort: "high"}}
+
+# Considered and rejected, with reasons -- so we do not re-litigate these.
+rejected:
+  - slug: moonshotai/kimi-k2.7-code
+    reason: >
+      $3.50/M output. The strongest coding specialist available, but a single
+      thinking config over the full grid would exceed the entire budget.
+      Revisit if the budget grows.
+  - slug: qwen/qwen-2.5-7b-instruct
+    reason: >
+      Cheapest model on the platform ($0.10/M out) but no reasoning support.
+      qwen3.5-9b with reasoning disabled is a better no-reasoning baseline:
+      same price class, and it holds the model constant across the effort axis.
+  - slug: z-ai/glm-5.1
+    reason: Dropped by user decision on 2026-07-25. See THESIS.md section 12.
