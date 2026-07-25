@@ -535,8 +535,7 @@ Honest gaps, in priority order:
 |---|---|
 | **`carr/providers/openrouter.py`** | **The only thing between here and real data.** API calls still exist only inside `day1_hello.py`. Implement the `Provider` contract in `providers/base.py` and swap it for `echo` |
 | **`carr/runner.py`** | The loop. Needs `request_hash` dedup (built, in `carr/db.py`), cheapest-first ordering (built, in `carr/effort.py`) and a cost cap that *aborts* (not built) |
-| **LiveCodeBench loader** | **The hard tier.** RQ4 is at risk of a degenerate result without it. Largest scientific gap in the repo |
-| **`config/experiment.yaml`** | The `$50` hard cap that THESIS.md §9 says lives here has no file to live in yet |
+| **`config/experiment.yaml`** | The `$50` hard cap that THESIS.md §9 says lives here has no file to live in yet. Build it *before* the runner — a cap added afterwards is a cap that was absent during the first run |
 | **`carr/features.py`** | CARR's inputs. `problems.n_tests` and `prompt_chars` are already stored for it |
 | **`carr/router/`** | CARR itself |
 | **`carr/analysis/`** | Pareto, convex hull, bootstrap CIs |

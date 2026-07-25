@@ -14,12 +14,13 @@
 | | |
 |---|---|
 | **Stage** | **Week 1 COMPLETE.** Days 1–5 ✅. Real generations flowing end to end: problem → OpenRouter → extract → grade → row. |
-| **Next action** | **Week 2 — the pilot.** Needs `carr/runner.py` (many problems, aborting cost cap, batched cost reconciliation) and `config/experiment.yaml`. Sample must be **difficulty-spread, not the first N problems** — see the saturation finding below. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
+| **Next action** | **Week 2 — the pilot** (needs your go-ahead; ~$0.30). **Nothing has been spent since Day 4.** Needs `carr/runner.py` (many problems, aborting cost cap, batched cost reconciliation) and `config/experiment.yaml`. Sample must be **difficulty-spread, not the first N problems** — see the saturation finding below. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
 | **Spend to date** | **$0.0114** of **$4.00 loaded** ($50 ceiling) |
-| **Rows in dataset** | **10 real of ~2,600** (300 problems × 10 configs — final count set by the pilot). Plus the free half: 542 problems + 10 configs |
+| **Rows in dataset** | **10 real of ~2,600** (~300 problems × 10 configs — final count set by the pilot). Problem pool: **717 loaded** (HumanEval+ 164, MBPP+ 378, LiveCodeBench 175) + 10 configs |
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
+- `2026-07-26` — **LiveCodeBench loaded — the hard tier exists. $0 spent.** `carr/benchmarks/livecodebench.py` (download + cache + decode) and a second grading path in `verify.py`, because LCB shares nothing with evalplus: 112 problems are stdin→stdout programs, 63 are methods on a `Solution` class, and **LCB ships no canonical solutions at all**. Pool is now **717 problems**; 80 of the 175 LCB problems are `hard`. ⚠️ **Two findings.** (1) **LCB is not contamination-controlled for us** — its newest problem is 2025-04-06, the dataset stopped updating 2025-06-05, and every model on the roster is a 2026 release. It enters as a *difficulty* tier only; `release_date` is stored so exposure can be reported. The proposal's contamination claim is now wrong (§14). (2) With no canonical solutions there is nothing to run through the grader as known-good, so `tests/test_verify_lcb.py` uses **hand-written reference solutions** for both styles — the only thing standing between us and an LCB version of the macOS `setrlimit` bug. 11 LCB tests pass; the references score 43/43 and 34/34.
 - `2026-07-26` — **Day 4 ✅ — Week 1 complete. First real generations, $0.0103.** `carr/providers/openrouter.py` + `scripts/run_one.py` (hard cap on *worst-case* spend that aborts before sending; dedup; cheapest-expected-first). One problem × all 10 configs. **Three findings, two of them serious.** (1) ⚠️ **Saturation is real and immediate: 10/10 configs solved `HumanEval/0`, including every no-reasoning config.** That is the risk §11 names as most likely to invalidate the headline result, visible on the very first cell. The pilot sample must be difficulty-spread, and the LiveCodeBench hard tier moves from "nice to have" to load-bearing. (2) **Thinking tokens measured far below assumption: mean 963 (range 278–1,915) against the 3,500 guess.** Grid re-prices from $3.66 to **$1.76** — but this is one easy problem, not a pilot; hard problems will pull it up. (3) **58× cost spread for an identical outcome** — $0.000081 (flash·off) to $0.004673 (kimi·high), all PASS. That spread is the thesis. Routing target for this problem: `deepseek-v4-flash | off`, as §9 predicted.
 - `2026-07-26` — **Kimi given both effort levels; roster 9 → 10 configs (+$0.10).** `subset_only` cuts *problems*, never the effort axis. With one effort kimi had a single point on the cost-accuracy plane, no measurable thinking delta, and RQ5 would have tested transfer along the model axis only — not the effort axis, which is what the thesis is about. Also corrected a pre-existing count error: the grid is **~2,600 rows**, not 2,700 (8 full configs × 300 + 2 held-out × 100); the old figure assumed kimi ran the full 300, contradicting `subset_only`.
 - `2026-07-26` — **Mock data removed; `scripts/studio.py` added.** All 360 seeded rows deleted, along with `seed_mock.py`, `make_viewer.py` and `providers/echo.py` — they had done their job (proving the chain and the dedup) and keeping fake rows next to real ones is a hazard. `scripts/init_db.py` now builds the database from real, free sources only: **542 problems** from evalplus + **10 configs** from the roster, with `generations`/`results` deliberately empty. Studio is a local SQLite browser (stdlib only, loopback only) with sort, search, pagination, a read-only SQL console, and row edit/delete. It introspects the schema per request, so it adapts to whatever the file contains. **Every write snapshots the database to `data/backups/` first** — verified by deleting 2 rows and confirming the snapshot still held 542. `--read-only` disables writing.
@@ -94,7 +95,7 @@ Run ~5,000 times. **This is ~70% of the work.** It's plumbing, not AI. It must b
 | **OpenRouter** | One API, one key, all models | Avoids 6 separate accounts and 6 client adapters. Small markup, worth it |
 | **`openai` SDK** | HTTP client | OpenRouter is OpenAI-compatible — set `base_url`, done. No custom client needed |
 | **evalplus** | HumanEval+ / MBPP+ problems + extended tests | The standard. Gives problems *and* graders |
-| **LiveCodeBench** | Hard, recent competitive problems | Contamination-resistant (filter by release date). **The hard tier that makes RQ4 non-trivial** |
+| **LiveCodeBench** | Hard, recent competitive problems | **The hard tier that makes RQ4 non-trivial** — 80 hard of 175. ⚠️ *Not* contamination-resistant for us: it stopped updating in 2025 and our models are 2026. Loaded as plain JSONL from HuggingFace, so no `datasets` dependency |
 | ~~Docker~~ → **evalplus `untrusted_check`** | Sandbox + grader | Reversed on Day 3. evalplus ships subprocess isolation, timeouts and `reliability_guard` (disables `os.system`, `os.fork`, ~40 more) — **and gets grading right**: `atol` float comparison and MBPP special oracles that hand-rolled grading would silently mislabel. Docker saved ~2 GB RAM on the 8 GB M2 |
 | **SQLite** (stdlib `sqlite3`) | The dataset | Zero setup, one portable file, real SQL. No server needed |
 | **pandas** | Analysis | Turning the table into results |
@@ -218,8 +219,11 @@ thesis/
 │   ├── effort.py            ✅ # models.yaml → the 10 configs, cheapest first
 │   ├── extract.py           ✅ # raw response → runnable Python
 │   ├── cost.py              ✅ # tokens → USD (reasoning ⊂ completion, never added twice)
-│   ├── benchmarks/             # humaneval_plus / mbpp_plus / livecodebench loaders
-│   ├── execute/verify.py    ✅ # THE grader (evalplus untrusted_check)
+│   ├── benchmarks/
+│   │   └── livecodebench.py ✅ # download, cache, decode. HE+/MBPP+ come from evalplus
+│   ├── execute/
+│   │   ├── verify.py        ✅ # THE grader: evalplus path + LiveCodeBench path
+│   │   └── _lcb_runner.py   ✅ # LCB subprocess entry point. Never import it
 │   ├── runner.py               # resumable, cost-capped grid loop
 │   ├── features.py             # lexical / structural / embedding features
 │   ├── router/                 # rules.py, knn.py, oracle.py
@@ -247,6 +251,7 @@ thesis/
 │   └── backups/             ✅ # gitignored. Auto-snapshot before any studio write
 └── tests/
     ├── test_verify.py       ✅ # 8 tests — the grader must be right
+    ├── test_verify_lcb.py   ✅ # 11 tests — hand-written references, no canonicals exist
     ├── test_extract.py      ✅ # 11 tests — extraction must never raise or invent
     └── test_db.py           ✅ # 13 tests — never pay twice
 ```
@@ -350,8 +355,34 @@ set by the pilot**, which measures mean thinking tokens.
 
 - **HumanEval+** — all 164 (easy anchor; short outputs, so it's the cheapest tier per problem)
 - **MBPP+** — sampled from the **378 available** (evalplus drops broken ones; the proposal's "500" does not exist)
-- **LiveCodeBench** — post-cutoff release window, weighted to hard/medium. ⚠️ **Loader not written.** This is the largest gap in the repo: without a hard tier, RQ4 risks a degenerate result where every problem is solved by the cheapest config.
+- **LiveCodeBench** — ✅ **loaded 2026-07-26: 175 problems** (80 hard, 52 medium, 43 easy; 112 stdin-style AtCoder, 63 function-style LeetCode). This is the hard tier that stops RQ4 from degenerating.
 - *(superseded: 164 + 150 + 120 = 434 at the $50 budget)*
+
+**Pool vs sample — they are different numbers.** The database holds **717
+problems**, which is *everything* these three benchmarks contain, not a
+selection: HumanEval+ is all 164, MBPP+ is all 378 (evalplus drops broken ones
+from the original 500), LCB v6 is all 175. The **~300 we plan to run** is a
+budget decision, because every problem costs 10 API calls. The pilot sets the
+final number, and at the tokens measured so far more than 300 may be affordable.
+
+### ⚠️ LiveCodeBench is NOT contamination-controlled for us
+
+The proposal cites LCB for contamination resistance. That property does not
+hold here, and the claim has to be dropped or heavily qualified:
+
+| | |
+|---|---|
+| Newest LCB problem | **2025-04-06** |
+| LCB dataset last updated | **2025-06-05** — it stopped; the "temporally updating benchmark" has not shipped a release in 13 months |
+| Our models | all **2026** releases |
+
+There is no post-cutoff window available. Every LCB problem predates every
+model on the roster by at least nine months.
+
+**LCB therefore enters this thesis as a difficulty tier, not as a contamination
+control.** `problems.release_date` stores each `contest_date` so the exposure
+can be *quantified and reported as a limitation* rather than assumed away. This
+is a §14 `.docx` edit: the proposal's contamination argument is now wrong.
 
 **Why not sparsify instead?** Tempting, but no: the routing label is *"cheapest config that passes this problem"*, which is only computable if **every** problem has been run through **every** config. A sparse grid breaks CARR's ground truth. So the budget is cut by reducing *problems*, never by skipping cells.
 
@@ -474,6 +505,8 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 |---|---|
 | Budget overrun | **$50 hard cap** in `experiment.yaml` that *aborts* the run (not warns); `max_tokens` ceiling per config so no single trace runs away; cheapest configs first, so a blowout costs the expensive tail not the cheap foundation; `request_hash` prevents ever paying twice |
 | Model deprecation mid-project | Roster in YAML, verified Week 1, snapshot dates recorded |
+| **⚠️ LiveCodeBench contamination is uncontrolled** | LCB stopped updating (newest problem 2025-04-06); every roster model is a 2026 release, so there is no post-cutoff window. **Mitigation is honesty, not filtering:** `problems.release_date` stores every contest date, the limitation is reported explicitly, and LCB is positioned as a *difficulty* tier rather than a contamination control. A suspiciously high pass rate on LCB hard problems should be read as possible memorisation |
+| **The LCB grader has no reference implementations to check itself against** | evalplus ships canonical solutions; LCB ships none, so `test_canonical_solutions_pass` has no LCB equivalent. Replaced by hand-written reference solutions in `tests/test_verify_lcb.py`, covering both execution styles. Without them an LCB harness bug would read as "all models fail hard problems" |
 | Effort control differs across models | `effort_mechanism` logged as a variable; report split by mechanism |
 | CARR shows no gain | RQ1–RQ3 stand alone (proposal §8 already says this). The gap decomposition turns a null result into a diagnostic one |
 | Generated code damages your machine | evalplus `untrusted_check` (subprocess + `reliability_guard`), tested Day 3 — **not Docker**, which was reversed on Day 3. Note evalplus's own docstring says it "is NOT a security sandbox": it contains accidents and casual hostility, not a determined adversary |
@@ -513,6 +546,10 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 | 2026-07-26 | Terminal viewer named `view.py`, **not** `inspect.py` | A script named `inspect.py` shadows the stdlib module for every other script in `scripts/`, and it broke the seeding run silently |
 | 2026-07-26 | `--in-tokens` default 600 → **100** | 600 was a pre-Day-2 guess; Day 2 measured medians of 99 (HE+) and 36 (MBPP+). Two docs carried mutually inconsistent grid costs derived from the two values. Grid is **$3.55**, single-sourced from the script |
 | 2026-07-26 | Exact prices in the roster (`0.0938/0.1876`) rather than rounded | `cost_computed_usd` is compared against `cost_actual_usd` to detect silent price drift; a 0.2% rounding error would read as permanent drift |
+| 2026-07-26 | **LiveCodeBench adopted as a difficulty tier, and its contamination claim dropped** | The saturation finding made a hard tier load-bearing, and LCB is the only source of one. But its contamination-resistance depends on release-date filtering, and there is no post-cutoff window left: it stopped updating in 2025, our models are 2026. Reporting the exposure is the only honest option |
+| 2026-07-26 | LCB grading lives in `verify.py` as a **second path**, not a second module | CLAUDE.md keeps grading in one file. Nothing is shared with the evalplus path — no canonical solutions, no `atol`, no special oracles, and two execution styles — so it is a branch in `grade()` rather than an abstraction over both |
+| 2026-07-26 | LCB stdin problems get one added sentence about reading stdin | The statement alone does not say how the program receives input, so the task is not well-posed. It is a constant string, identical across every config, so it cannot confound the effort axis — but it *is* a documented deviation from "send the prompt unmodified" |
+| 2026-07-26 | One subprocess per (problem, config), not per test | 175 problems × ~43 tests × 10 configs would be 75,000 interpreter startups. The cost is that one non-terminating test times out the whole problem, which is what evalplus already does |
 | 2026-07-26 | **Kimi held-out model gets BOTH effort levels** (roster 9 → 10 configs, +$0.10) | `subset_only` is a cut to the number of *problems*, not to the effort axis. With one effort kimi had a single point on the cost-accuracy plane and no measurable thinking delta, so RQ5 would have tested transfer along the model axis only. The `off` half is the cheap one — no thinking, ~350 output tokens |
 | 2026-07-26 | Run order is by **expected** cost; `config_id` stays ordered by output price | They differ: `off` and `high` share a per-token price but burn ~10× different token counts. `config_id` is an identity that must never move; run order is a budget policy that should |
 | 2026-07-26 | The cost cap aborts on **worst case** (`max_tokens` × output price), not expected case | An expected-case cap is not a cap. `run_one.py` computes the worst case for every cell before sending anything, and refuses the whole invocation if it exceeds `--max-usd` |
@@ -553,6 +590,9 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 6. **§8** — add benchmark saturation to the risk table; cite [When Routing Collapses](https://arxiv.org/pdf/2602.03478), which names the phenomenon
 7. **§3 — rewrite the gap analysis (biggest edit owed).** Add Route-To-Reason, DART, HRBench, LLMRouterBench. Re-position from "first joint (model × effort) router" to "the cheapest possible router" (§15.3)
 8. **§1, §9** — drop "first systematic evaluation"; HRBench (May 2026) covers much of that ground
+9. **⚠️ Wherever LiveCodeBench is cited for contamination resistance — rewrite it.** The property does not hold: LCB's newest problem is 2025-04-06, the dataset stopped updating 2025-06-05, and every roster model is a 2026 release. Re-position LCB as the *difficulty* tier that keeps RQ4 from degenerating, and state the contamination exposure as a limitation with the `release_date` distribution to back it up (§9, §11)
+10. **§6.2 problem counts** — the pool is **717** (HumanEval+ 164, MBPP+ 378, LCB 175); the *run* set is ~300 and is set by the pilot. State pool and sample separately; the current text conflates them
+11. **§6.2 / methods** — note that LCB problems are graded by a second harness (stdin→stdout and `Solution`-method execution) with hand-written reference solutions, because LCB ships no canonical implementations
 
 ---
 

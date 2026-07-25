@@ -40,9 +40,14 @@ uv run python scripts/view.py HumanEval/0     # all 10 configs side by side
 uv run python scripts/view.py HumanEval/0 -c 3   # prompt → response → code → grade
 ```
 
-`init_db.py` loads only what is real and free: 542 problems from evalplus and
-the 10 verified configs. `generations` and `results` start empty — those rows
-cost money.
+`init_db.py` loads only what is real and free: **717 problems** (HumanEval+ 164,
+MBPP+ 378, LiveCodeBench 175) and the 10 verified configs. `generations` and
+`results` start empty — those rows cost money.
+
+LiveCodeBench is the hard tier: 80 of its 175 problems are `hard`, which is what
+keeps RQ4 from degenerating into "always use the cheapest config". ⚠️ It is
+**not** a contamination control here — it stopped updating in 2025 and every
+model on the roster is a 2026 release. See THESIS.md §9.
 
 ## Buy a row (this spends real money)
 

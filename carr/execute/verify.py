@@ -23,9 +23,16 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # MUST be set before evalplus.eval is imported.
 #
@@ -53,6 +60,8 @@ from evalplus.data.mbpp import mbpp_serialize_inputs  # noqa: F401  (import side
 from evalplus.eval import PASS
 from evalplus.evaluate import check_correctness, get_groundtruth
 from evalplus.eval._special_oracle import MBPP_OUTPUT_NOT_NONE_TASKS
+
+from carr.execute._lcb_runner import SENTINEL as _SENTINEL
 
 # Loading problems and computing ground truth is slow (ground truth executes
 # every canonical solution against every test input), so both are cached here
@@ -112,6 +121,13 @@ def grade(dataset: str, task_id: str, code: str) -> GradeResult:
     in a guarded subprocess -- never trust it, and never call this on the main
     thread of anything you care about.
     """
+    if dataset == "livecodebench":
+        # A genuinely different execution model, not a variant of the same one:
+        # LCB problems are stdin->stdout programs or method calls on a Solution
+        # class, and evalplus's checker only knows how to compare the return
+        # value of a free function. See _grade_lcb.
+        return _grade_lcb(task_id, code)
+
     problems, expected = _load(dataset)
     problem = problems[task_id]
 
@@ -144,4 +160,121 @@ def grade(dataset: str, task_id: str, code: str) -> GradeResult:
         n_tests_passed=base_n + plus_n,
         n_tests_total=base_total + plus_total,
         error_type=error_type,
+    )
+
+
+# --------------------------------------------------------------- LiveCodeBench
+#
+# Separate from the evalplus path above because nothing is shared: LCB has no
+# canonical solutions to derive expected outputs from (they ship with the tests
+# instead), no `atol`, no special oracles, and two execution styles neither of
+# which is "call a function and compare the return value".
+#
+# The comparison is string equality after normalisation, which is what the
+# judges these problems came from do. There is no float tolerance, because
+# these problems are integer/string answers -- if a future release adds
+# floating-point answers this will need an `atol` equivalent and will silently
+# mark correct solutions wrong until it gets one.
+
+_LCB_MIN_TIMEOUT = 15.0
+_LCB_PER_TEST = 0.4
+_LCB_MAX_TIMEOUT = 90.0
+
+
+def _normalise_stdout(text: str) -> str:
+    """Trailing whitespace per line, and trailing blank lines, are not answers."""
+    return "\n".join(line.rstrip() for line in text.strip().split("\n")).strip()
+
+
+def _lcb_matches(produced: str | None, expected: str, style: str) -> bool:
+    if produced is None:          # crashed, timed out, or never ran
+        return False
+    if style == "stdin":
+        return _normalise_stdout(produced) == _normalise_stdout(expected)
+
+    # Functional: compare parsed values so [1,2] and [1, 2] agree. Falling back
+    # to string comparison keeps a non-JSON answer gradeable rather than
+    # crashing the whole problem.
+    try:
+        return json.loads(produced) == json.loads(expected)
+    except (json.JSONDecodeError, TypeError):
+        return produced.strip() == expected.strip()
+
+
+def _run_lcb(problem: dict, code: str, tests: list[dict]) -> list[str | None]:
+    """One subprocess for the whole test set. Returns per-test stdout, or None.
+
+    One process rather than one per test: 175 problems x ~43 tests x 10 configs
+    would otherwise be 75,000 interpreter startups. The cost of batching is that
+    a single non-terminating test times out the whole problem -- which is the
+    same behaviour evalplus's per-task timeout already has.
+    """
+    if not tests:
+        return []
+
+    payload = {
+        "code": code,
+        "tests": tests,
+        "style": problem["style"],
+        "entry_point": problem["entry_point"],
+    }
+    timeout = min(_LCB_MAX_TIMEOUT, _LCB_MIN_TIMEOUT + _LCB_PER_TEST * len(tests))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        payload_path = os.path.join(tmp, "payload.json")
+        with open(payload_path, "w") as f:
+            json.dump(payload, f)
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "carr.execute._lcb_runner", payload_path],
+                capture_output=True, text=True, timeout=timeout,
+                cwd=str(_REPO_ROOT),
+                # A solution that reads stdin outside the harness must not
+                # inherit ours and block forever.
+                stdin=subprocess.DEVNULL,
+            )
+        except subprocess.TimeoutExpired:
+            return [None] * len(tests)
+
+    marker = proc.stdout.rfind(_SENTINEL)
+    if marker == -1:
+        return [None] * len(tests)
+    try:
+        produced = json.loads(proc.stdout[marker + len(_SENTINEL):])
+    except json.JSONDecodeError:
+        return [None] * len(tests)
+    if len(produced) != len(tests):
+        return [None] * len(tests)
+    return produced
+
+
+def _grade_lcb(task_id: str, code: str) -> GradeResult:
+    from carr.benchmarks.livecodebench import get_livecodebench
+
+    problem = get_livecodebench()[task_id]
+    style = problem["style"]
+
+    def run(tests: list[dict]) -> tuple[bool, int, int]:
+        produced = _run_lcb(problem, code, tests)
+        n_ok = sum(
+            _lcb_matches(p, t["output"], style) for p, t in zip(produced, tests)
+        )
+        return n_ok == len(tests), n_ok, len(tests)
+
+    # Same split as evalplus: `base` is the examples printed in the problem
+    # statement, `plus` is the hidden set. Public tests run first so an obvious
+    # failure costs one short subprocess instead of a long one.
+    base_ok, base_n, base_total = run(problem["base_input"])
+    plus_ok, plus_n, plus_total = run(problem["plus_input"])
+
+    passed = base_ok and plus_ok
+    return GradeResult(
+        passed=passed,
+        base_passed=base_ok,
+        n_tests_passed=base_n + plus_n,
+        n_tests_total=base_total + plus_total,
+        # LCB gives us no way to tell a wrong answer from a crash from a
+        # timeout: all three arrive as "no matching output". Reporting
+        # "assertion" is the honest floor, same reasoning as the evalplus path.
+        error_type=None if passed else "assertion",
     )

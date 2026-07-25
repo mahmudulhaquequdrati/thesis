@@ -46,7 +46,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # "expected" line in the estimate. The pilot replaces these with measurements.
 EXPECTED_OUT = {"off": 350, "high": 3500}
 
-BENCH_DATASET = {"humaneval_plus": "humaneval", "mbpp_plus": "mbpp"}
+BENCH_DATASET = {"humaneval_plus": "humaneval", "mbpp_plus": "mbpp",
+                 "livecodebench": "livecodebench"}
 
 
 def expected_cost(cfg, prompt_tokens: int) -> float:

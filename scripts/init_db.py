@@ -30,13 +30,19 @@ LOADERS = {
     "humaneval": ("humaneval_plus", "get_human_eval_plus"),
     "mbpp": ("mbpp_plus", "get_mbpp_plus"),
 }
+# LiveCodeBench is loaded separately: different source, different record shape,
+# and it carries a real difficulty label and a contest date that the other two
+# do not have.
+LCB_BENCHMARK = "livecodebench"
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=None)
-    ap.add_argument("--benchmarks", nargs="*", default=["humaneval", "mbpp"],
-                    choices=list(LOADERS), help="which pools to load")
+    ap.add_argument("--benchmarks", nargs="*",
+                    default=["humaneval", "mbpp", "livecodebench"],
+                    choices=[*LOADERS, LCB_BENCHMARK],
+                    help="which pools to load")
     ap.add_argument("--reset", action="store_true",
                     help="delete the database file first -- DESTROYS generations")
     args = ap.parse_args()
@@ -71,7 +77,33 @@ def main() -> None:
     import evalplus.data as ep
 
     total = 0
+    if LCB_BENCHMARK in args.benchmarks:
+        from carr.benchmarks.livecodebench import get_livecodebench
+
+        lcb = get_livecodebench()
+        for task_id, p in lcb.items():
+            db.upsert_problem(
+                conn,
+                problem_id=task_id,
+                benchmark=LCB_BENCHMARK,
+                prompt=p["prompt"],
+                entry_point=p["entry_point"],   # "" for stdin-style problems
+                n_base_tests=len(p["base_input"]),
+                n_plus_tests=len(p["plus_input"]),
+                difficulty=p["difficulty"],     # real labels, unlike HE+/MBPP+
+                # Stored so contamination exposure can be REPORTED. It cannot be
+                # filtered: LCB stopped updating in 2025 and every model on the
+                # roster is a 2026 release. See the loader's docstring.
+                release_date=p["contest_date"],
+            )
+        conn.commit()
+        total += len(lcb)
+        print(f"  problems  {len(lcb):>5}   {LCB_BENCHMARK}   "
+              f"(hard tier; contamination UNCONTROLLED -- see THESIS.md section 11)")
+
     for key in args.benchmarks:
+        if key == LCB_BENCHMARK:
+            continue
         benchmark, fn_name = LOADERS[key]
         problems = getattr(ep, fn_name)()
         for task_id, p in problems.items():
@@ -93,8 +125,10 @@ def main() -> None:
 
     s = db.summary(conn)
     print(f"\n  {total} problems, {s['configs']} configs loaded.")
-    print(f"  generations {s['generations']}   results {s['results']}   "
-          f"(empty until the pilot buys them)")
+    note = "" if s["generations"] else "   (empty until the pilot buys them)"
+    print(f"  generations {s['generations']}   results {s['results']}{note}")
+    if s["generations"]:
+        print(f"  real spend so far: ${s['real_spend_usd']:.6f}")
     print(f"\n  {db_path}")
     print(f"  browse it:  uv run python scripts/studio.py")
     conn.close()
