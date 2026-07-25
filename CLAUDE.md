@@ -32,6 +32,7 @@ status section costs more time than the work itself saved.
 | **THESIS.md §11** | Risk table | When a new risk appears or one is retired |
 | **THESIS.md §13** | Glossary | When a new term enters the project |
 | **THESIS.md §14** | `.docx` edits still owed | When code and proposal diverge |
+| **THESIS.md §15** | Prior art, external datasets, novelty positioning | When a related paper or reusable dataset is found |
 | **README.md** | Setup steps, layout table | When either changes |
 | **CLAUDE.md** | This file | When a working rule changes |
 | **`config/*.yaml`** | Roster, prices, snapshot dates | After every `verify_roster.py` run |
