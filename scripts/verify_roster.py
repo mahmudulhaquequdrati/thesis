@@ -39,21 +39,25 @@ def fetch(url: str) -> dict:
         return json.loads(r.read())
 
 
-def endpoint_prices(slug: str, provider: str) -> tuple[float, float] | None:
-    """Price of the PINNED provider's endpoint, in USD per million tokens.
+def endpoint(slug: str, tag: str) -> dict | None:
+    """The PINNED endpoint, matched on the routing tag.
 
-    GET /models reports only the cheapest provider for a slug. That is not what
-    we are billed unless the provider is pinned -- which it now is, so this is
-    the only price that matters.
+    Matching on `tag` rather than `provider_name` because the tag is what
+    `provider.order` accepts AND what identifies the quantization --
+    "baidu/fp8" and "baidu/fp4" are the same provider at different fidelity
+    and very different prices.
+
+    GET /models reports only the cheapest provider for a slug, which is not
+    what we are billed once a provider is pinned. This is the only price that
+    matters.
     """
     try:
         data = fetch(f"{MODELS_URL}/{slug}/endpoints")["data"]
     except Exception:
         return None
     for e in data.get("endpoints", []):
-        if e.get("provider_name") == provider:
-            p = e["pricing"]
-            return float(p["prompt"]) * 1e6, float(p["completion"]) * 1e6
+        if e.get("tag") == tag:
+            return e
     return None
 
 
@@ -67,10 +71,23 @@ def check(entry: dict, live: dict | None, section: str) -> list[str]:
     if not pinned:
         return [f"{slug}: no `provider` pinned -- cost would be nondeterministic"]
 
-    prices = endpoint_prices(slug, pinned)
-    if prices is None:
-        return [f"{slug}: pinned provider {pinned!r} no longer serves it"]
-    price_in, price_out = prices
+    ep = endpoint(slug, pinned)
+    if ep is None:
+        return [f"{slug}: pinned endpoint {pinned!r} no longer exists -- "
+                f"calls will 404 because allow_fallbacks is off"]
+    price_in = float(ep["pricing"]["prompt"]) * 1e6
+    price_out = float(ep["pricing"]["completion"]) * 1e6
+
+    want_q = entry.get("quantization")
+    live_q = str(ep.get("quantization"))
+    if want_q and want_q != "official" and live_q != want_q:
+        problems.append(f"{slug}: quantization says {want_q}, endpoint is {live_q} "
+                        f"-- precision is supposed to be held constant")
+
+    up = ep.get("uptime_last_30m")
+    if up is not None and up < 90:
+        problems.append(f"{slug}: pinned endpoint uptime_last_30m is {up:.1f}% "
+                        f"-- with allow_fallbacks off, that is failed calls")
 
     for label, want, got in (("price_in_per_m", entry["price_in_per_m"], price_in),
                              ("price_out_per_m", entry["price_out_per_m"], price_out)):
@@ -115,9 +132,9 @@ def main() -> None:
                     print(f"         {i}")
             else:
                 p = live["pricing"]  # noqa: F841
-                print(f"  ok     {slug:30} via {entry['provider']:14} "
-                      f"${entry['price_in_per_m']:.4f} / "
-                      f"${entry['price_out_per_m']:.4f} per M")
+                print(f"  ok     {slug:28} {entry['provider']:17} "
+                      f"{str(entry.get('quantization')):>8}  "
+                      f"${entry['price_in_per_m']:.4f}/${entry['price_out_per_m']:.4f} per M")
 
     # Rejected models are documentation, but a price collapse is the one thing
     # that would justify re-litigating a rejection, so report it rather than

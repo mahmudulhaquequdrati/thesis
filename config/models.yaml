@@ -17,11 +17,25 @@
 #
 # Unpinned, the same config on the same problem costs a different amount on
 # different days, which makes every CPC and Pareto number irreproducible.
-# `provider` below is sent as {"provider": {"order": [name],
-# "allow_fallbacks": false}}, so a call either runs at the recorded price or
-# fails outright. A failure is recorded and resumable; a surprise 4x bill is
-# neither. Prices below are that provider's endpoint price, NOT the /models
-# headline.
+# `provider` below is the OpenRouter routing TAG (not the display name), sent
+# as {"provider": {"order": [tag], "allow_fallbacks": false}}. A call either
+# runs at the recorded price or fails outright. A failure is recorded and
+# resumable; a surprise 4x bill is neither. Prices are that endpoint's price,
+# NOT the /models headline.
+#
+# THE TAG ALSO PINS QUANTIZATION, and that matters more than the price.
+#
+# The cheapest provider is usually the most quantized: deepseek-v4-flash's
+# cheapest endpoint is fp4, kimi-k2.6's is fp4. Serving a 4-bit model and
+# calling it "deepseek-v4-flash" would confound the whole thesis -- a failure
+# would mean "this quantization failed", not "this model failed", and the
+# effort axis would be compared across models of differing fidelity.
+#
+# Policy: **fp8 or better for every model**, so precision is held constant.
+# It is nearly free -- qwen3.5-9b gets bf16 at the same price as fp8,
+# deepseek-v4-pro's official endpoint is both the cheapest AND unquantized,
+# and only kimi costs more (fp8 $3.40 vs fp4 $2.72). Uptime is recorded
+# because allow_fallbacks is off: a provider outage means failed calls.
 
 snapshot_date: "2026-07-26"  # providers pinned this date
 verified_against: "https://openrouter.ai/api/v1/models"
@@ -33,7 +47,9 @@ verified_against: "https://openrouter.ai/api/v1/models"
 models:
 
   - slug: qwen/qwen3.5-9b
-    provider: SiliconFlow   # pinned; price below is THIS provider's
+    provider: deepinfra/bf16
+    quantization: bf16          # held constant across the roster
+    provider_uptime_30m: 99.7
     family: qwen
     role: cheapest tier -- the no-reasoning baseline and the floor of the frontier
     price_in_per_m: 0.100
@@ -49,14 +65,16 @@ models:
         params: {reasoning: {effort: "high"}}
 
   - slug: deepseek/deepseek-v4-flash
-    provider: DeepInfra   # pinned; price below is THIS provider's
+    provider: baidu/fp8
+    quantization: fp8          # held constant across the roster
+    provider_uptime_30m: 100.0
     family: deepseek
     role: cost-efficient reasoner, mid tier
     # Remarkably cheap for its tier -- cheaper per output token than
     # qwen3.6-35b despite sitting higher on most leaderboards. Expect it to
     # dominate a large stretch of the Pareto frontier.
-    price_in_per_m: 0.090
-    price_out_per_m: 0.180
+    price_in_per_m: 0.091
+    price_out_per_m: 0.182
     context_length: 1048576
     supports_reasoning: true
     efforts:
@@ -68,7 +86,9 @@ models:
         params: {reasoning: {effort: "high"}}
 
   - slug: qwen/qwen3.6-35b-a3b
-    provider: AkashML   # pinned; price below is THIS provider's
+    provider: akashml/fp8
+    quantization: fp8          # held constant across the roster
+    provider_uptime_30m: 100.0
     family: qwen
     role: mid tier, permissive licence
     price_in_per_m: 0.140
@@ -84,11 +104,19 @@ models:
         params: {reasoning: {effort: "high"}}
 
   - slug: deepseek/deepseek-v4-pro
-    provider: DeepSeek   # pinned; price below is THIS provider's
+    provider: baidu/fp8
+    quantization: fp8          # held constant across the roster
+    # NOT deepseek's own endpoint, which is cheapest ($0.870/M) and
+    # unquantized. It is blocked by this account's data policy -- OpenRouter
+    # returns "No endpoints available matching your guardrail restrictions".
+    # Enabling providers that may train on inputs at
+    # https://openrouter.ai/settings/privacy would cut this model's output
+    # price from $1.251 to $0.870, a 30% saving on the dearest full-grid model.
+    provider_uptime_30m: 100.0
     family: deepseek
     role: frontier open-weight reasoner, top tier
-    price_in_per_m: 0.435
-    price_out_per_m: 0.870
+    price_in_per_m: 0.625
+    price_out_per_m: 1.251
     context_length: 1048576
     supports_reasoning: true
     efforts:
@@ -108,11 +136,13 @@ models:
 # $2.72/M output the full grid would cost more than every other config combined.
 held_out:
   - slug: moonshotai/kimi-k2.6
-    provider: Baidu   # pinned; price below is THIS provider's
+    provider: siliconflow/fp8
+    quantization: fp8          # held constant across the roster
+    provider_uptime_30m: 100.0
     family: moonshot
     role: RQ5 held-out model
-    price_in_per_m: 0.646
-    price_out_per_m: 2.720
+    price_in_per_m: 0.770
+    price_out_per_m: 3.400
     context_length: 262144
     supports_reasoning: true
     subset_only: true

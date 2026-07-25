@@ -108,7 +108,11 @@ class OpenRouterProvider:
                 # unexpected 4x bill is neither.
                 extra_body={
                     **dict(config.params),
-                    "provider": {"order": [config.provider],
+                    # `only`, not `order`: `order` expresses a preference and
+                    # still 404s here, while `only` is the hard restriction we
+                    # want. The tag carries the quantization too
+                    # ("baidu/fp8"), so one field pins provider AND precision.
+                    "provider": {"only": [config.provider],
                                  "allow_fallbacks": False},
                 },
             )
