@@ -6,6 +6,7 @@ readme = "README.md"
 # Pinned below 3.13: evalplus and the ONNX embedding stack lack wheels for 3.13+.
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "evalplus>=0.3.1",
     "openai>=2.48.0",
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
