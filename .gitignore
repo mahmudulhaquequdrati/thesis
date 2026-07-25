@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets — never commit the API key
+.env
+
+# Generated data. The SQLite file is the scientific asset: back it up
+# separately (it costs real money to regenerate), but keep it out of git.
+data/*.sqlite
+data/figures/
