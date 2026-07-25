@@ -27,6 +27,9 @@ class Config:
 
     model_slug: str
     family: str
+    # OpenRouter serves one slug from many providers at different prices (up to
+    # a 4x spread). Pinned so cost is deterministic and reproducible.
+    provider: str
     effort_label: str        # "off" | "high"
     effort_mechanism: str    # "native_toggle" | "budget_forcing" -- NOT equivalent
     params: dict[str, Any]   # the exact `reasoning` block sent to the API
@@ -56,6 +59,7 @@ def _expand(entry: dict, snapshot_date: str, held_out: bool) -> list[Config]:
         Config(
             model_slug=entry["slug"],
             family=entry["family"],
+            provider=entry["provider"],
             effort_label=effort["label"],
             effort_mechanism=effort["mechanism"],
             params=effort.get("params", {}),

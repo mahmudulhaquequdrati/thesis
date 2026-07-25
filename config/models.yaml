@@ -5,8 +5,25 @@
 #
 # Never hardcode a model id anywhere else in the codebase. The open-weight
 # landscape moves every 6-8 weeks; this file is the only place that knows.
+#
+# EVERY MODEL PINS A PROVIDER, and this is not optional.
+#
+# OpenRouter serves one model slug from many providers at different prices --
+# deepseek-v4-pro has 18, spanning $0.87 to $3.48 per M output, a 4x spread.
+# GET /models reports only the CHEAPEST provider's price, but routing picks
+# whichever provider it likes. On 2026-07-26 a single pilot run was served
+# deepseek-v4-pro by nine different providers and was billed 1.54x what this
+# table predicted.
+#
+# Unpinned, the same config on the same problem costs a different amount on
+# different days, which makes every CPC and Pareto number irreproducible.
+# `provider` below is sent as {"provider": {"order": [name],
+# "allow_fallbacks": false}}, so a call either runs at the recorded price or
+# fails outright. A failure is recorded and resumable; a surprise 4x bill is
+# neither. Prices below are that provider's endpoint price, NOT the /models
+# headline.
 
-snapshot_date: "2026-07-26"
+snapshot_date: "2026-07-26"  # providers pinned this date
 verified_against: "https://openrouter.ai/api/v1/models"
 
 # Five models x two effort levels = 10 configs. The held-out model runs on a
@@ -16,6 +33,7 @@ verified_against: "https://openrouter.ai/api/v1/models"
 models:
 
   - slug: qwen/qwen3.5-9b
+    provider: SiliconFlow   # pinned; price below is THIS provider's
     family: qwen
     role: cheapest tier -- the no-reasoning baseline and the floor of the frontier
     price_in_per_m: 0.100
@@ -31,16 +49,14 @@ models:
         params: {reasoning: {effort: "high"}}
 
   - slug: deepseek/deepseek-v4-flash
+    provider: DeepInfra   # pinned; price below is THIS provider's
     family: deepseek
     role: cost-efficient reasoner, mid tier
     # Remarkably cheap for its tier -- cheaper per output token than
     # qwen3.6-35b despite sitting higher on most leaderboards. Expect it to
     # dominate a large stretch of the Pareto frontier.
-    # Exact live values, not rounded: cost_computed_usd is compared against
-    # cost_actual_usd to detect silent price drift, so a 0.2% rounding error
-    # here would look like drift forever.
-    price_in_per_m: 0.0938
-    price_out_per_m: 0.1876
+    price_in_per_m: 0.090
+    price_out_per_m: 0.180
     context_length: 1048576
     supports_reasoning: true
     efforts:
@@ -52,6 +68,7 @@ models:
         params: {reasoning: {effort: "high"}}
 
   - slug: qwen/qwen3.6-35b-a3b
+    provider: AkashML   # pinned; price below is THIS provider's
     family: qwen
     role: mid tier, permissive licence
     price_in_per_m: 0.140
@@ -67,6 +84,7 @@ models:
         params: {reasoning: {effort: "high"}}
 
   - slug: deepseek/deepseek-v4-pro
+    provider: DeepSeek   # pinned; price below is THIS provider's
     family: deepseek
     role: frontier open-weight reasoner, top tier
     price_in_per_m: 0.435
@@ -90,6 +108,7 @@ models:
 # $2.72/M output the full grid would cost more than every other config combined.
 held_out:
   - slug: moonshotai/kimi-k2.6
+    provider: Baidu   # pinned; price below is THIS provider's
     family: moonshot
     role: RQ5 held-out model
     price_in_per_m: 0.646

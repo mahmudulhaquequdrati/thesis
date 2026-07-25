@@ -41,6 +41,8 @@ class GenerationSettings:
     n: int
     max_tokens: int
     retries: int
+    concurrency: int = 1
+    grade_concurrency: int = 4
 
 
 @dataclass

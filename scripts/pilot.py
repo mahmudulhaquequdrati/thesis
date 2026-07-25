@@ -52,6 +52,8 @@ def main() -> None:
                          "(default from experiment.yaml)")
     ap.add_argument("--no-reconcile", action="store_true",
                     help="skip the ground-truth cost lookup at the end")
+    ap.add_argument("--concurrency", type=int,
+                    help="parallel API calls (default from experiment.yaml)")
     ap.add_argument("--db", default=None)
     args = ap.parse_args()
 
@@ -140,25 +142,37 @@ def main() -> None:
     provider = OpenRouterProvider()
     print()
 
-    def on_row(cell, gen, result, cost, spend):
-        u = gen.usage
-        if result is None:
-            verdict, detail = "SKIP", (gen.error or "no code")[:28]
-        else:
-            verdict = "PASS" if result.passed else "FAIL"
-            detail = f"{result.n_tests_passed}/{result.n_tests_total}"
-        print(f"  {cell.problem_id:26} {cell.config.label:42} {verdict} "
-              f"{detail:>12}  think {(u.reasoning_tokens if u else 0):>6}  "
-              f"{fmt_usd(cost)}  [{fmt_usd(spend)}]")
+    bought_n = [0]
 
-    report = runner.run(
+    def on_row(cell, gen, result, cost, spend):
+        bought_n[0] += 1
+        u = gen.usage
+        flag = "ERR " if gen.error else "    "
+        print(f"  [{bought_n[0]:>3}/{len(cells)}] {flag}{cell.problem_id:24} "
+              f"{cell.config.label:40} out {(u.completion_tokens if u else 0):>6} "
+              f"think {(u.reasoning_tokens if u else 0):>6}  {fmt_usd(cost)}  "
+              f"[{fmt_usd(spend)}]", flush=True)
+
+    concurrency = args.concurrency or exp.generation.concurrency
+    print(f"  PHASE 1/2  buying {len(cells)} generations, {concurrency} at a time\n",
+          flush=True)
+    report = runner.buy(
         conn, cells, provider,
         max_tokens=max_tokens,
         abort_at_usd=cap,
         warn_at_usd=exp.budget.warn_at_usd,
         temperature=exp.generation.temperature,
+        concurrency=concurrency,
         on_row=on_row,
     )
+
+    # Grading is free, so it runs over everything ungraded in the database --
+    # not just this run's rows. Interrupted earlier runs get picked up here.
+    print(f"\n  PHASE 2/2  grading (free, no API), "
+          f"{exp.generation.grade_concurrency} at a time...", flush=True)
+    graded, passed = runner.grade_pending(
+        conn, concurrency=exp.generation.grade_concurrency)
+    report.graded, report.passed = graded, passed
 
     print("\n" + "=" * 92)
     print(f"  bought {report.bought}   graded {report.graded}   "

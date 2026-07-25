@@ -39,14 +39,38 @@ def fetch(url: str) -> dict:
         return json.loads(r.read())
 
 
+def endpoint_prices(slug: str, provider: str) -> tuple[float, float] | None:
+    """Price of the PINNED provider's endpoint, in USD per million tokens.
+
+    GET /models reports only the cheapest provider for a slug. That is not what
+    we are billed unless the provider is pinned -- which it now is, so this is
+    the only price that matters.
+    """
+    try:
+        data = fetch(f"{MODELS_URL}/{slug}/endpoints")["data"]
+    except Exception:
+        return None
+    for e in data.get("endpoints", []):
+        if e.get("provider_name") == provider:
+            p = e["pricing"]
+            return float(p["prompt"]) * 1e6, float(p["completion"]) * 1e6
+    return None
+
+
 def check(entry: dict, live: dict | None, section: str) -> list[str]:
     slug = entry["slug"]
     if live is None:
         return [f"{slug}: NOT FOUND on OpenRouter (was in `{section}`)"]
 
     problems = []
-    price_in = float(live["pricing"]["prompt"]) * 1e6
-    price_out = float(live["pricing"]["completion"]) * 1e6
+    pinned = entry.get("provider")
+    if not pinned:
+        return [f"{slug}: no `provider` pinned -- cost would be nondeterministic"]
+
+    prices = endpoint_prices(slug, pinned)
+    if prices is None:
+        return [f"{slug}: pinned provider {pinned!r} no longer serves it"]
+    price_in, price_out = prices
 
     for label, want, got in (("price_in_per_m", entry["price_in_per_m"], price_in),
                              ("price_out_per_m", entry["price_out_per_m"], price_out)):
@@ -90,10 +114,10 @@ def main() -> None:
                 for i in issues:
                     print(f"         {i}")
             else:
-                p = live["pricing"]
-                print(f"  ok     {slug:34} "
-                      f"${float(p['prompt']) * 1e6:.4f} / "
-                      f"${float(p['completion']) * 1e6:.4f} per M")
+                p = live["pricing"]  # noqa: F841
+                print(f"  ok     {slug:30} via {entry['provider']:14} "
+                      f"${entry['price_in_per_m']:.4f} / "
+                      f"${entry['price_out_per_m']:.4f} per M")
 
     # Rejected models are documentation, but a price collapse is the one thing
     # that would justify re-litigating a rejection, so report it rather than
@@ -105,7 +129,7 @@ def main() -> None:
             if live is None:
                 print(f"    {entry['slug']:34} no longer served")
             else:
-                p = live["pricing"]
+                p = live["pricing"]  # noqa: F841
                 print(f"    {entry['slug']:34} "
                       f"${float(p['prompt']) * 1e6:.4f} / "
                       f"${float(p['completion']) * 1e6:.4f} per M")

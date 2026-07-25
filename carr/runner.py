@@ -26,6 +26,7 @@ are collected and reconciled in one pass at the end.
 from __future__ import annotations
 
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 
 from carr import db
@@ -36,6 +37,15 @@ from carr.extract import extract_code
 # Rough per-call output-token expectation. Used ONLY for ordering and for the
 # printed estimate -- never for the cap, which uses the worst case.
 EXPECTED_OUT = {"off": 350, "high": 3500}
+
+# max_tokens turns out NOT to be a hard bound. On 2026-07-26 qwen3.5-9b
+# returned 35,837 completion tokens against a max_tokens of 16,000 -- 2.24x --
+# and then set finish_reason to "error". So "max_tokens x output price" is the
+# worst case the *request* asked for, not the worst case that can be billed.
+# The pre-call check multiplies by this so a single overrun cannot walk through
+# a cap that looked satisfied. Actual spend is still re-read before every call,
+# so an overrun self-corrects for everything after it.
+WORST_CASE_SAFETY = 2.5
 
 BENCH_DATASET = {
     "humaneval_plus": "humaneval",
@@ -61,6 +71,13 @@ class Cell:
                             self.config.price_in_per_m, self.config.price_out_per_m)
 
     def worst_usd(self, max_tokens: int) -> float:
+        """What this call could cost if it ignores max_tokens (see the constant)."""
+        return WORST_CASE_SAFETY * compute_cost(
+            self.prompt_tokens, max_tokens,
+            self.config.price_in_per_m, self.config.price_out_per_m)
+
+    def requested_usd(self, max_tokens: int) -> float:
+        """What it costs if the provider honours max_tokens. For reporting only."""
         return compute_cost(self.prompt_tokens, max_tokens,
                             self.config.price_in_per_m, self.config.price_out_per_m)
 
@@ -116,86 +133,171 @@ def lifetime_spend(conn) -> float:
     ).fetchone()[0]
 
 
-def run(conn, cells: list[Cell], provider, *, max_tokens: int,
+def _store(conn, cell, gen, temperature: float) -> tuple[int | None, float]:
+    """Write one generation row. Returns (gen_id, cost). Main thread only."""
+    cost = compute_cost(
+        gen.usage.prompt_tokens if gen.usage else 0,
+        gen.usage.completion_tokens if gen.usage else 0,
+        cell.config.price_in_per_m, cell.config.price_out_per_m,
+    )
+    gen_id = db.insert_generation(
+        conn,
+        problem_id=cell.problem_id, config_id=cell.config.tier_index,
+        request_hash=cell.request_hash, openrouter_gen_id=gen.provider_gen_id,
+        raw_response=gen.raw_response,
+        extracted_code=extract_code(gen.raw_response),
+        prompt_tokens=gen.usage.prompt_tokens if gen.usage else None,
+        completion_tokens=gen.usage.completion_tokens if gen.usage else None,
+        reasoning_tokens=gen.usage.reasoning_tokens if gen.usage else None,
+        cost_computed_usd=cost, cost_actual_usd=None,
+        finish_reason=gen.finish_reason, latency_ms=gen.latency_ms,
+        temperature_sent=temperature, error=gen.error, is_mock=0,
+    )
+    conn.commit()
+    return gen_id, cost
+
+
+def buy(conn, cells: list[Cell], provider, *, max_tokens: int,
         abort_at_usd: float, warn_at_usd: float | None = None,
-        temperature: float = 0.0, on_row=None) -> RunReport:
-    """Buy and grade each cell. Stops the moment the next call could breach."""
+        temperature: float = 0.0, concurrency: int = 1,
+        on_row=None) -> RunReport:
+    """Phase 1: purchase generations. No grading -- that is free and separate.
+
+    API calls are I/O-bound and independent, so they run `concurrency` at a
+    time. The cost cap survives that because dispatch happens in waves: before
+    a wave is sent, the whole wave's worst case must fit the remaining
+    headroom. Nothing is fired that has not already been paid for in the
+    accounting, so concurrency cannot slip a call past the cap.
+
+    Grading is deliberately NOT interleaved. It is free, CPU-bound and slow
+    (an LCB problem runs 43 tests twice), and mixing it in serialised the paid
+    calls behind it -- the pilot was spending a minute per cell mostly waiting
+    on the grader.
+    """
     report = RunReport(planned=len(cells))
     spend = lifetime_spend(conn)
     warned = False
+    i = 0
+    inflight: dict = {}          # future -> (cell, reserved_usd)
+    reserved = 0.0
 
-    for cell in cells:
-        worst = cell.worst_usd(max_tokens)
-        if spend + worst > abort_at_usd:
-            report.stopped_reason = (
-                f"stopped before {cell.config.label} on {cell.problem_id}: "
-                f"lifetime spend {fmt_usd(spend)} + worst case {fmt_usd(worst)} "
-                f"would exceed the cap {fmt_usd(abort_at_usd)}"
-            )
-            break
+    with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
+        while True:
+            # Top the pool up continuously rather than in fixed waves. A wave
+            # only advances when its SLOWEST call returns, so one 180s
+            # straggler idles every other worker; measured latency on identical
+            # prompts already varied 2.5s-12.8s, and thinking calls are far
+            # worse. Continuous dispatch keeps every slot busy.
+            while i < len(cells) and len(inflight) < max(1, concurrency):
+                nxt = cells[i]
+                w = nxt.worst_usd(max_tokens)
+                # Reserve the worst case up front, so a call is never dispatched
+                # on budget that another in-flight call might already be using.
+                if spend + reserved + w > abort_at_usd:
+                    break
+                fut = pool.submit(provider.complete, nxt.prompt, nxt.config,
+                                  problem_id=nxt.problem_id,
+                                  max_tokens=max_tokens, temperature=temperature)
+                inflight[fut] = (nxt, w)
+                reserved += w
+                i += 1
 
-        gen = provider.complete(cell.prompt, cell.config,
-                                problem_id=cell.problem_id,
-                                max_tokens=max_tokens, temperature=temperature)
+            if not inflight:
+                if i < len(cells):
+                    blocker = cells[i]
+                    report.stopped_reason = (
+                        f"stopped before {blocker.config.label} on "
+                        f"{blocker.problem_id}: lifetime spend {fmt_usd(spend)} + "
+                        f"worst case {fmt_usd(blocker.worst_usd(max_tokens))} "
+                        f"would exceed the cap {fmt_usd(abort_at_usd)}"
+                    )
+                break
 
-        cost = compute_cost(
-            gen.usage.prompt_tokens if gen.usage else 0,
-            gen.usage.completion_tokens if gen.usage else 0,
-            cell.config.price_in_per_m, cell.config.price_out_per_m,
-        )
-        spend += cost
-        report.spent_usd += cost
+            done, _ = wait(list(inflight), return_when=FIRST_COMPLETED)
+            for fut in done:
+                cell, w = inflight.pop(fut)
+                reserved -= w
+                try:
+                    gen = fut.result()
+                except Exception as exc:                       # noqa: BLE001
+                    from carr.providers.base import Generation
+                    gen = Generation(error=f"{type(exc).__name__}: {exc}")
 
-        code = extract_code(gen.raw_response)
-        gen_id = db.insert_generation(
-            conn,
-            problem_id=cell.problem_id, config_id=cell.config.tier_index,
-            request_hash=cell.request_hash, openrouter_gen_id=gen.provider_gen_id,
-            raw_response=gen.raw_response, extracted_code=code,
-            prompt_tokens=gen.usage.prompt_tokens if gen.usage else None,
-            completion_tokens=gen.usage.completion_tokens if gen.usage else None,
-            reasoning_tokens=gen.usage.reasoning_tokens if gen.usage else None,
-            cost_computed_usd=cost, cost_actual_usd=None,
-            finish_reason=gen.finish_reason, latency_ms=gen.latency_ms,
-            temperature_sent=temperature, error=gen.error, is_mock=0,
-        )
-        conn.commit()
+                gen_id, cost = _store(conn, cell, gen, temperature)
+                spend += cost
+                report.spent_usd += cost
+                if gen_id is None:
+                    report.skipped += 1
+                    continue
+                report.bought += 1
+                if gen.provider_gen_id:
+                    report.generation_ids.append(gen.provider_gen_id)
+                if gen.error:
+                    report.errors += 1
+                if on_row:
+                    on_row(cell, gen, None, cost, spend)
 
-        if gen_id is None:            # lost a race with the UNIQUE index
-            report.skipped += 1
-            continue
-        report.bought += 1
-        if gen.provider_gen_id:
-            report.generation_ids.append(gen.provider_gen_id)
-        if gen.error:
-            report.errors += 1
+            if warn_at_usd and not warned and spend >= warn_at_usd:
+                warned = True
+                print(f"\n  ** lifetime spend has passed {fmt_usd(warn_at_usd)} "
+                      f"(cap {fmt_usd(abort_at_usd)}) **\n", flush=True)
 
-        result = None
-        if code:
-            dataset = BENCH_DATASET[cell.benchmark]
-            t0 = time.perf_counter()
-            # Grading is free but slow, and it runs untrusted code. A crash
-            # here must not lose the generation we just paid for -- the row is
-            # already committed above.
-            try:
-                result = grade(dataset, cell.problem_id, code)
-                db.upsert_result(conn, gen_id, result,
-                                 exec_ms=int((time.perf_counter() - t0) * 1000))
-                conn.commit()
-                report.graded += 1
-                report.passed += int(result.passed)
-            except Exception as exc:                          # noqa: BLE001
-                print(f"    grader raised on {cell.problem_id}: "
-                      f"{type(exc).__name__}: {exc}")
+    return report
 
-        if on_row:
-            on_row(cell, gen, result, cost, spend)
 
-        if warn_at_usd and not warned and spend >= warn_at_usd:
-            warned = True
-            print(f"\n  ** lifetime spend has passed {fmt_usd(warn_at_usd)} "
-                  f"(cap {fmt_usd(abort_at_usd)}) **\n")
+def grade_pending(conn, *, concurrency: int = 4, on_graded=None) -> tuple[int, int]:
+    """Phase 2: grade every generation that has code but no result yet. FREE.
 
+    Separate from buying so it can be re-run at any time -- fixing an
+    extraction bug means re-grading, never re-purchasing. Threads are fine
+    despite the GIL because grade() spends its time waiting on subprocesses.
+    """
+    rows = conn.execute(
+        """SELECT g.gen_id, g.problem_id, g.extracted_code, p.benchmark
+           FROM generations g
+           JOIN problems p ON p.problem_id = g.problem_id
+           LEFT JOIN results r ON r.gen_id = g.gen_id
+           WHERE r.gen_id IS NULL AND g.extracted_code IS NOT NULL
+           ORDER BY g.gen_id"""
+    ).fetchall()
+    if not rows:
+        return 0, 0
+
+    def work(row):
+        t0 = time.perf_counter()
+        try:
+            res = grade(BENCH_DATASET[row["benchmark"]], row["problem_id"],
+                        row["extracted_code"])
+            return row, res, int((time.perf_counter() - t0) * 1000), None
+        except Exception as exc:                               # noqa: BLE001
+            return row, None, 0, exc
+
+    graded = passed = 0
+    with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
+        for row, res, ms, exc in pool.map(work, rows):
+            if exc is not None:
+                print(f"    grader raised on {row['problem_id']}: "
+                      f"{type(exc).__name__}: {exc}", flush=True)
+                continue
+            db.upsert_result(conn, row["gen_id"], res, exec_ms=ms)
+            conn.commit()
+            graded += 1
+            passed += int(res.passed)
+            if on_graded:
+                on_graded(row, res)
+    return graded, passed
+
+
+def run(conn, cells: list[Cell], provider, *, max_tokens: int,
+        abort_at_usd: float, warn_at_usd: float | None = None,
+        temperature: float = 0.0, concurrency: int = 1,
+        grade_concurrency: int = 4, on_row=None) -> RunReport:
+    """Buy everything, then grade everything. Convenience wrapper over the two."""
+    report = buy(conn, cells, provider, max_tokens=max_tokens,
+                 abort_at_usd=abort_at_usd, warn_at_usd=warn_at_usd,
+                 temperature=temperature, concurrency=concurrency, on_row=on_row)
+    graded, passed = grade_pending(conn, concurrency=grade_concurrency)
+    report.graded, report.passed = graded, passed
     return report
 
 
@@ -231,4 +333,25 @@ def reconcile_costs(conn, provider, generation_ids: list[str],
         drift += actual - (row["cost_computed_usd"] or 0.0)
         updated += 1
     conn.commit()
+
+    # A gap between the price table and the bill is how a stale or wrong roster
+    # announces itself, and it is otherwise invisible. On 2026-07-26 an unpinned
+    # run came back 1.54x over, because OpenRouter routed one slug across nine
+    # providers whose prices span 4x while config/models.yaml recorded only the
+    # cheapest. Providers are pinned now, so any gap here means the pin broke or
+    # a price moved -- stop and re-run verify_roster.py before spending more.
+    if updated:
+        computed = sum(
+            r[0] or 0.0 for r in conn.execute(
+                "SELECT cost_computed_usd FROM generations "
+                "WHERE cost_actual_usd IS NOT NULL")
+        )
+        actual = computed + drift
+        if computed > 0 and abs(actual / computed - 1.0) > 0.05:
+            print(f"\n  !! PRICE TABLE IS WRONG: billed {fmt_usd(actual)} against "
+                  f"a predicted {fmt_usd(computed)} ({actual / computed:.2f}x).\n"
+                  f"     The cost cap is enforced on the predicted number, so it "
+                  f"is not protecting you.\n"
+                  f"     Run: uv run python scripts/verify_roster.py\n",
+                  flush=True)
     return updated, drift

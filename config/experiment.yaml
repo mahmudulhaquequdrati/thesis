@@ -38,6 +38,13 @@ generation:
   # A failed call is recorded and skipped, not retried in place -- a retry loop
   # is how a cost cap gets defeated. Re-running the script picks it up instead.
   retries: 0
+  # Parallel API calls. Safe with the cost cap because dispatch happens in
+  # waves: a wave is only sent if its whole worst case fits the headroom.
+  concurrency: 12
+  # Parallel graders. Free (no API), CPU- and subprocess-bound. An LCB problem
+  # runs 43 tests twice, which is what made the serial pilot take a minute a
+  # cell -- almost all of it waiting on grading rather than on the API.
+  grade_concurrency: 6
 
 sampling:
   # Fixed everywhere: sampling, splits, bootstrap. Reproducibility is graded.

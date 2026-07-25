@@ -48,7 +48,7 @@ class OpenRouterProvider:
     name = "openrouter"
 
     def __init__(self, api_key: str | None = None, base_url: str = BASE_URL,
-                 timeout: float = 300.0):
+                 timeout: float = 180.0):
         key = api_key or os.environ.get("OPENROUTER_API_KEY")
         if not key:
             raise RuntimeError(
@@ -99,7 +99,18 @@ class OpenRouterProvider:
                 max_tokens=max_tokens,
                 # The reasoning block is not an OpenAI parameter, so it rides in
                 # extra_body. Straight from the roster -- never constructed here.
-                extra_body=dict(config.params),
+                #
+                # `provider` pins which upstream serves the call. Without it
+                # OpenRouter routes freely across providers whose prices differ
+                # by up to 4x for the same slug, so the same config costs a
+                # different amount on different days. allow_fallbacks is false
+                # on purpose: a failed call is recorded and resumable, an
+                # unexpected 4x bill is neither.
+                extra_body={
+                    **dict(config.params),
+                    "provider": {"order": [config.provider],
+                                 "allow_fallbacks": False},
+                },
             )
         except Exception as exc:
             # Includes rate limits, timeouts and upstream 5xx. The row records
@@ -125,17 +136,26 @@ class OpenRouterProvider:
                 reasoning_tokens=reasoning,
             )
 
-        # A thinking model can spend its whole budget reasoning and return no
-        # text at all. That is a real, paid, empty result -- record it as one
-        # rather than letting it look like a transport failure.
+        finish = getattr(choice, "finish_reason", None) if choice else None
+
         error = None
-        if not text:
+        if finish == "error":
+            # Observed on 2026-07-26: qwen3.5-9b returned 35,837 completion
+            # tokens against a max_tokens of 16,000, then set finish_reason to
+            # "error" -- 143 KB of prose with no code in it. Content came back,
+            # so treating "has text" as success recorded a degenerate call as a
+            # normal failed answer. It is a provider error and is recorded as one.
+            error = f"provider finish_reason=error ({len(text or '')} chars returned)"
+        elif not text:
+            # A thinking model can spend its whole budget reasoning and return
+            # no text at all. Real, paid, and empty -- record it as such rather
+            # than letting it look like a transport failure.
             error = "empty response (no content returned)"
 
         return Generation(
             raw_response=text,
             usage=usage,
-            finish_reason=getattr(choice, "finish_reason", None) if choice else None,
+            finish_reason=finish,
             latency_ms=latency_ms,
             error=error,
             provider_gen_id=getattr(resp, "id", None),
