@@ -21,6 +21,8 @@ uv run python scripts/day1_hello.py
 |---|---|
 | `THESIS.md` | Master document — status, plan, schema, science, glossary |
 | `CLAUDE.md` | Working rules, incl. the mandatory doc-update ritual and the $50 budget cap |
+| `docs/codebase-tour.md` | **Learn the code here** — every file explained, in order |
+| `docs/data-spec.md` | Exact contract: what we send, what we store, every column |
 | `Thesis_Project_Proposal.docx` | The submitted proposal (Revision 2) |
 | `scripts/` | Runnable entry points |
 | `carr/` | The harness package (built out from Week 2) |

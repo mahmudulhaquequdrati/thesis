@@ -190,6 +190,10 @@ Chain Days 1–3: real problem → model → extract code from the response (mar
 thesis/
 ├── THESIS.md                   # ← this file, the source of truth
 ├── CLAUDE.md                   # working rules: doc-update ritual, budget discipline
+├── docs/
+│   ├── codebase-tour.md        # ← START HERE to learn the code, file by file
+│   ├── data-spec.md            # exact send/store contract
+│   └── advisor-repositioning.md
 ├── README.md
 ├── Thesis_Project_Proposal.docx
 ├── pyproject.toml              # uv, pinned to Python 3.12
