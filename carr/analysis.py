@@ -203,10 +203,14 @@ def abort_curve(conn, thresholds=(2000, 3000, 4000, 5000, 6000, 8000,
 def best_threshold(conn) -> AbortPoint | None:
     """The cheapest threshold that loses no solved problems.
 
-    This is the number the thesis reports as a free saving. It must be chosen
-    on data the abort is NOT then evaluated against, or it is fitted -- which
-    is why config/experiment.yaml keeps `abort.reasoning_tokens: null` until
-    the grid has run unaborted.
+    Returns None when no such threshold exists, which is the measured outcome:
+    at the 48k ceiling, 56 calls above 10,000 reasoning tokens succeeded, so
+    every threshold trades solutions for money. The pilot's apparent free
+    saving was an artefact of truncation at 16k -- a censored call cannot
+    succeed, so the ceiling manufactured the cliff the claim depended on.
+
+    A threshold must still be chosen on data the abort is NOT evaluated
+    against, or it is fitted.
     """
     curve = [p for p in abort_curve(conn) if p.dominant]
     return min(curve, key=lambda p: p.cost_usd) if curve else None
@@ -233,8 +237,10 @@ def censoring(conn, max_tokens: int | None = None) -> list[dict]:
     so it makes long reasoning look worse than it is.
 
     At the 16,000 ceiling the pilot ran under, 44% of LCB-hard thinking calls
-    were censored. This is reported alongside the results rather than left for
-    a reader to discover.
+    were censored -- and that censoring is what produced the pilot's
+    now-refuted claim of a free abort threshold. At 48k it is down to ~26% on
+    hard, so the right-hand end of the abort curve is still softer than the
+    left. Reported alongside the results rather than left to be discovered.
     """
     rows = conn.execute(f"""
         SELECT COALESCE(p.difficulty, p.benchmark) AS tier,

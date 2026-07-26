@@ -81,10 +81,19 @@ generation:
 # the stream, aborting mid-reasoning is billed $0.00, and the same cell run to
 # completion cost $0.010978. So this saves the WHOLE call, not a pro-rata part.
 #
-# Simulated over the pilot's thinking calls: aborting at 10,000 reasoning
-# tokens kept 42/42 passes and cut spend 44%; at 6,000, 78% saved for 10%
-# fewer solved. null disables it -- the grid must run unaborted first, or the
-# threshold would be fitted on the data it is evaluated against.
+# There is NO free threshold. The pilot appeared to show one -- abort at 10,000
+# reasoning tokens, keep every solved problem, save 44% -- but that held only
+# because the 16k ceiling truncated longer calls and forced them to fail. At
+# the 48k ceiling, 56 calls above 10,000 reasoning tokens SUCCEEDED, and pass
+# rate declines smoothly rather than falling off a cliff: 83.8% under 10k,
+# 55.2% from 10-20k, 39.3% above 20k.
+#
+# What remains is an honest tradeoff curve (scripts/results.py), e.g. abort at
+# 16,000 keeps 88% of solutions for half the cost. Pick a point from it
+# deliberately; there is no setting that costs nothing.
+#
+# null leaves the abort off, which is correct for building the dataset -- a
+# threshold chosen on the same data it is evaluated against is fitted.
 abort:
   reasoning_tokens: null
 
