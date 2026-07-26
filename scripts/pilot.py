@@ -54,6 +54,18 @@ def main() -> None:
                     help="skip the ground-truth cost lookup at the end")
     ap.add_argument("--concurrency", type=int,
                     help="parallel API calls (default from experiment.yaml)")
+    ap.add_argument("--efforts", nargs="*",
+                    help="only these effort labels, e.g. --efforts high. Use "
+                         "when one arm of the grid is already complete and the "
+                         "budget should go to the arm that is missing")
+    ap.add_argument("--order", default="cheapest", choices=["cheapest", "problem"],
+                    help="'problem' finishes every config for one problem "
+                         "before the next, so a cap abort leaves complete rows "
+                         "rather than a complete cheap layer")
+    ap.add_argument("--tiers", nargs="*",
+                    help="only these difficulty tiers or benchmarks, e.g. "
+                         "--tiers hard medium. Spends on the problems that "
+                         "actually discriminate between configs")
     ap.add_argument("--db", default=None)
     args = ap.parse_args()
 
@@ -69,12 +81,32 @@ def main() -> None:
 
     strata = exp.pilot_strata if args.set == "pilot" else exp.grid_strata
     problem_ids = sample_problems(conn, strata, exp.seed)
+
+    if args.tiers:
+        # Restrict to tiers that carry signal. The pilot measured HumanEval+,
+        # MBPP+ and LCB-easy at 72-100% pass regardless of reasoning; buying
+        # more of those informs nothing.
+        wanted = set(args.tiers)
+        marks = ",".join("?" * len(problem_ids))
+        keep = {r[0] for r in conn.execute(
+            f"""SELECT problem_id FROM problems
+                WHERE problem_id IN ({marks})
+                  AND (COALESCE(difficulty, benchmark) IN ({','.join('?' * len(wanted))}))""",
+            [*problem_ids, *sorted(wanted)])}
+        problem_ids = [p for p in problem_ids if p in keep]
+        if not problem_ids:
+            sys.exit(f"no problems match tiers {sorted(wanted)}")
+
+    if args.efforts:
+        configs = [c for c in configs if c.effort_label in set(args.efforts)]
+        if not configs:
+            sys.exit(f"no configs match efforts {args.efforts}")
     # The pilot deliberately runs every config on every sampled problem -- it is
     # measuring, not building the dataset. The grid honours the held-out subset.
     cells, skipped = runner.plan(
         conn, problem_ids, configs,
         subset_size=None if args.set == "pilot" else exp.held_out_subset,
-        seed=exp.seed, expected_out=exp.expected_out)
+        seed=exp.seed, expected_out=exp.expected_out, order=args.order)
 
     already = runner.lifetime_spend(conn)
     max_tokens = exp.generation.max_tokens

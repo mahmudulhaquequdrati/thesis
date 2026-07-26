@@ -128,7 +128,8 @@ def held_out_subset(problem_ids: list[str], size: int, seed: int) -> set[str]:
 
 def plan(conn, problem_ids: list[str], configs: list, *,
          subset_size: int | None = None, seed: int = 0,
-         expected_out: dict | None = None) -> tuple[list[Cell], int]:
+         expected_out: dict | None = None,
+         order: str = "cheapest") -> tuple[list[Cell], int]:
     """Build the work list, cheapest expected first, skipping bought cells.
 
     Configs marked `subset_only` run on a subset of problems rather than all of
@@ -162,9 +163,21 @@ def plan(conn, problem_ids: list[str], configs: list, *,
             cells.append(Cell(problem_id, problem["benchmark"], prompt, cfg, h,
                               prompt_tokens, expected_out=expected_out))
 
-    # Global cheapest-first: every `off` config across every problem runs before
-    # any `high` one, so a cap abort leaves the cheap half of the grid complete.
-    cells.sort(key=lambda c: (c.expected_usd(), c.problem_id))
+    if order == "problem":
+        # Problem-major: finish every config for one problem before starting the
+        # next. A cap abort then leaves COMPLETE rows for a prefix of problems,
+        # which is what an effort-axis comparison needs -- the same problem run
+        # under every config.
+        #
+        # Cheapest-first is wrong for that: it completes the cheap configs
+        # across every problem and cuts the expensive ones, so no problem ends
+        # up with a full set. Within a problem, still cheapest first.
+        cells.sort(key=lambda c: (c.problem_id, c.expected_usd()))
+    else:
+        # Global cheapest-first: every `off` config across every problem runs
+        # before any `high` one, so a cap abort leaves the cheap half complete.
+        # Right when filling a grid whose rows are independent.
+        cells.sort(key=lambda c: (c.expected_usd(), c.problem_id))
     return cells, skipped
 
 

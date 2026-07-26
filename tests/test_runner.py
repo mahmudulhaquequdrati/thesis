@@ -281,3 +281,31 @@ def test_thinking_gets_more_headroom_than_answering():
     exp = load_experiment()
     assert exp.generation.tokens_for("high") >= 32000
     assert 8000 <= exp.generation.tokens_for("off") <= 20000
+
+
+def test_problem_major_order_completes_rows_not_layers(conn):
+    """A cap abort must leave whole problems finished, not a cheap layer.
+
+    Cheapest-first is right for filling an independent grid, but wrong when the
+    comparison needs the same problem under every config: it finishes the cheap
+    configs everywhere and cuts the expensive ones, so no problem ends up with
+    a full set.
+    """
+    cells, _ = runner.plan(conn, ["T/0", "T/1", "T/2"], load_configs(),
+                           order="problem")
+    seen, order_of_first = [], {}
+    for c in cells:
+        if c.problem_id not in order_of_first:
+            order_of_first[c.problem_id] = len(seen)
+        seen.append(c.problem_id)
+    # every cell for a problem is contiguous
+    for pid in order_of_first:
+        idx = [i for i, p in enumerate(seen) if p == pid]
+        assert idx == list(range(idx[0], idx[-1] + 1)), \
+            f"{pid}'s cells are interleaved with another problem's"
+
+
+def test_cheapest_order_is_still_the_default(conn):
+    cells, _ = runner.plan(conn, ["T/0", "T/1"], load_configs())
+    costs = [c.expected_usd() for c in cells]
+    assert costs == sorted(costs)
