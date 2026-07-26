@@ -61,6 +61,15 @@ def main() -> None:
         print(f"  {r['outcome']:22} {r['n']:>4} {r['avg_reasoning'] or 0:>15.0f} "
               f"${r['total_usd'] or 0:>10.6f}")
 
+    cens = analysis.censoring(conn)
+    if cens:
+        rule("⚠  CENSORING — calls stopped at max_tokens, true length unknown")
+        print("  A censored call CANNOT have succeeded, so this biases the abort")
+        print("  curve against long reasoning. Raise max_tokens if it is material.")
+        print(f"\n  {'tier':22} {'n':>4} {'censored':>9} {'pct':>6}")
+        for r in cens:
+            print(f"  {r['tier']:22} {r['n']:>4} {r['censored']:>9} {r['pct']:>5}%")
+
     rule("RQ3  What would a reasoning-length abort have saved?")
     print("  (an aborted call is billed $0 -- measured, not assumed)")
     print(f"\n  {'abort at':>9} {'passes kept':>13} {'cost':>11} {'saved':>7} {'aborted':>8}")

@@ -39,7 +39,7 @@ BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-call ceiling on completion tokens (docs/data-spec.md section 2). One
 # runaway reasoning trace can cost more than a hundred normal calls.
-DEFAULT_MAX_TOKENS = 32000
+DEFAULT_MAX_TOKENS = 48000
 
 
 class OpenRouterProvider:

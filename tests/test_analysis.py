@@ -236,3 +236,24 @@ def test_a_thinking_call_with_no_reasoning_tokens_is_still_counted(conn):
     pt = analysis.abort_curve(conn, thresholds=(99999,))[0]
     assert pt.baseline_usd == pytest.approx(0.004)
     assert pt.passes_total == 1
+
+
+def test_censoring_is_reported_not_hidden(conn):
+    """A call stopped at max_tokens has an unknown true reasoning length.
+
+    It cannot have succeeded, so it drags the abort curve against long
+    reasoning. That has to be visible next to the result, not discovered by a
+    reader later.
+    """
+    add(conn, "P/ok", HIGH, think=1000, cost=0.01, passed=True, difficulty="hard")
+    add(conn, "P/cut", HIGH, think=16000, cost=0.05, passed=False,
+        difficulty="hard", finish="length", error="empty response", graded=False)
+
+    rows = {r["tier"]: r for r in analysis.censoring(conn)}
+    assert rows["hard"]["censored"] == 1
+    assert rows["hard"]["pct"] == 50.0
+
+
+def test_no_censoring_reported_when_nothing_was_cut_off(conn):
+    add(conn, "P/ok", HIGH, think=1000, cost=0.01, passed=True)
+    assert analysis.censoring(conn) == []

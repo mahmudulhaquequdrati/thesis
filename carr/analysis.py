@@ -221,3 +221,33 @@ def summary(conn) -> dict:
         "abort_curve": abort_curve(conn),
         "best_threshold": best_threshold(conn),
     }
+
+
+def censoring(conn, max_tokens: int | None = None) -> list[dict]:
+    """How many thinking calls hit the ceiling, per tier.
+
+    A call stopped at `max_tokens` gives a censored observation: its true
+    reasoning length is unknown, only that it exceeded the cap. That biases
+    every statistic computed from reasoning length, and it biases the abort
+    curve in one specific direction -- a censored call cannot have succeeded,
+    so it makes long reasoning look worse than it is.
+
+    At the 16,000 ceiling the pilot ran under, 44% of LCB-hard thinking calls
+    were censored. This is reported alongside the results rather than left for
+    a reader to discover.
+    """
+    rows = conn.execute(f"""
+        SELECT COALESCE(p.difficulty, p.benchmark) AS tier,
+               COUNT(*) AS n,
+               SUM(CASE WHEN g.finish_reason = 'length' THEN 1 ELSE 0 END) AS censored,
+               ROUND(100.0 * SUM(CASE WHEN g.finish_reason = 'length' THEN 1 ELSE 0 END)
+                     / COUNT(*), 1) AS pct
+        FROM generations g
+        JOIN configs c  ON c.config_id = g.config_id
+        JOIN problems p ON p.problem_id = g.problem_id
+        WHERE {_REAL} AND NOT {_INFRA} AND c.effort_label != 'off'
+        GROUP BY tier
+        HAVING censored > 0
+        ORDER BY pct DESC
+    """).fetchall()
+    return [dict(r) for r in rows]

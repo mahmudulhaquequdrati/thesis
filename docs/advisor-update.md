@@ -98,9 +98,14 @@ models to think less, so runtime monitoring is not a redundant mechanism.
 * **Sample size: 15 problems, 59 thinking calls.** Everything above is
   direction, not estimate. The full grid — 318 problems, 2,744 cells, priced
   at **$4.59** — fixes this and fits the remaining budget.
-* **The 10,000-token threshold held because nothing above it succeeded here.**
-  That is exactly the kind of result that regresses with more data, and it is
-  the main scientific risk.
+* **The 10,000-token threshold held because nothing above it succeeded here —
+  and that is partly an artefact.** The pilot ran with a 16,000-token ceiling,
+  and **44% of LiveCodeBench-hard thinking calls hit it** and were forced to
+  return nothing. A censored call cannot succeed, so the ceiling itself biases
+  the curve against long reasoning. The ceiling is now 48,000 (~4× any
+  threshold worth considering) and the censoring rate is reported alongside
+  every result. This is the main scientific risk and I would not report the
+  44%-saving figure without re-measuring at the higher ceiling.
 * **LiveCodeBench is not contamination-controlled for us.** Its newest problem
   is 2025-04-06, it stopped updating 2025-06-05, and every model on the roster
   is a 2026 release. There is no post-cutoff window available, so LCB enters as

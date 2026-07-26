@@ -34,11 +34,25 @@ generation:
   # Per-call ceiling on completion tokens. This is a cost control, not a
   # quality setting: a truncated answer is a legitimate failure that cost a
   # known, bounded amount. It is also what the worst-case cap is computed from.
-  # Raised 16000 -> 32000 on 2026-07-26. At 16k, 12 of 12 truncated calls
-  # produced ZERO usable code while being billed in full, and thinking configs
-  # scored BELOW no-thinking on hard problems -- which measured the ceiling,
-  # not the model. The abort threshold, not max_tokens, is the cost control now.
-  max_tokens: 32000
+  # 16000 -> 32000 -> 48000 on 2026-07-26.
+  #
+  # At 16k, 44% of LCB-hard thinking calls hit the ceiling and returned nothing.
+  # That is not just lost data, it biases the headline: "nothing above 10,000
+  # reasoning tokens ever succeeded" is partly an artefact of calls beyond 10k
+  # being cut off at 16k and forced to fail. Testing that claim honestly needs
+  # calls near the decision boundary to run to completion.
+  #
+  # NOT removed, which is the tempting alternative. Without a ceiling the worst
+  # case is bounded only by context: kimi at 262,144 tokens is $0.89 for one
+  # call, and the cost cap computes its reservation FROM max_tokens, so it
+  # would have nothing to bound. The limit is already soft -- a provider once
+  # returned 35,837 tokens against a 16,000 cap -- and removing it makes it
+  # none at all.
+  #
+  # 48k is ~4x the largest threshold worth considering (12k), so the curve is
+  # measured on uncensored data where it matters. analysis.censoring() reports
+  # what remains; if it is above a few percent on any tier, raise this again.
+  max_tokens: 48000
   # A failed call is recorded and skipped, not retried in place -- a retry loop
   # is how a cost cap gets defeated. Re-running the script picks it up instead.
   retries: 0
