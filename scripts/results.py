@@ -13,6 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from carr import analysis, db  # noqa: E402
+from carr.experiment import load_experiment  # noqa: E402
+from carr.stats import ci_str  # noqa: E402
 
 
 def rule(title: str) -> None:
@@ -70,13 +72,55 @@ def main() -> None:
         for r in cens:
             print(f"  {r['tier']:22} {r['n']:>4} {r['censored']:>9} {r['pct']:>5}%")
 
+    # ---------------------------------------------------------- economics
+    seed = load_experiment().seed
+    paired = analysis.paired_problems(conn)
+    rule(f"ECONOMICS  cost per correct answer  (n={len(paired)} paired problems)")
+    print("  Only problems with BOTH a reasoning-off and a reasoning-on graded")
+    print("  result are comparable at all. Per-config coverage still varies")
+    print("  within that set -- read the n column before comparing two rows.")
+    print(f"\n  {'config':32} {'n':>4} {'solved':>7} {'CPC $':>10} "
+          f"{'95% CI':>22} {'TPC':>9}")
+    econ = analysis.cost_per_correct(conn, paired, seed=seed, n_resamples=1500)
+    for r in econ:
+        cpc = f"{r['cpc_usd']:.5f}" if r["cpc_usd"] is not None else "  never"
+        tpc = f"{r['tpc']:.0f}" if r["tpc"] is not None else "-"
+        print(f"  {r['model_slug'] + '|' + r['effort_label']:32} {r['n_problems']:>4} "
+              f"{r['solved']:>7} {cpc:>10} "
+              f"{ci_str(r['cpc_lo'], r['cpc_hi'], places=5):>22} {tpc:>9}")
+
+    usable = [r for r in econ if r["cpc_usd"] is not None]
+    if len(usable) >= 2:
+        best, worst = usable[0], usable[-1]
+        print(f"\n  cheapest per correct answer: {best['model_slug']}|"
+              f"{best['effort_label']}  at ${best['cpc_usd']:.5f}")
+        print(f"  dearest:                     {worst['model_slug']}|"
+              f"{worst['effort_label']}  at ${worst['cpc_usd']:.5f}"
+              f"   ({worst['cpc_usd'] / best['cpc_usd']:.0f}x)")
+        # Overlapping intervals mean the ordering between two configs is not
+        # established, however different the point estimates look.
+        overlaps = [(a, b) for a, b in zip(usable, usable[1:])
+                    if a["cpc_hi"] >= b["cpc_lo"]]
+        if overlaps:
+            print(f"\n  {len(overlaps)} adjacent pair(s) have OVERLAPPING intervals "
+                  f"-- their order is not established:")
+            for a, b in overlaps[:4]:
+                print(f"    {a['model_slug']}|{a['effort_label']} vs "
+                      f"{b['model_slug']}|{b['effort_label']}")
+
     rule("RQ3  What would a reasoning-length abort have saved?")
     print("  (an aborted call is billed $0 -- measured, not assumed)")
-    print(f"\n  {'abort at':>9} {'passes kept':>13} {'cost':>11} {'saved':>7} {'aborted':>8}")
-    for p in analysis.abort_curve(conn):
-        mark = "  <- free saving" if p.dominant else ""
-        print(f"  {p.threshold:>9} {p.passes_kept:>6}/{p.passes_total:<6} "
-              f"${p.cost_usd:>10.6f} {p.saved_pct:>6.0f}% {p.aborted:>8}{mark}")
+    curve = analysis.abort_curve_ci(conn, seed=seed, n_resamples=1500)
+    print(f"  intervals bootstrap over PROBLEMS (n={curve[0]['n_problems'] if curve else 0}), "
+          f"not cells -- two cells on one problem are not independent\n")
+    print(f"  {'abort at':>9} {'solutions kept':>16} {'95% CI':>14} "
+          f"{'cost':>10} {'saved':>7} {'95% CI':>14}")
+    for c in curve:
+        print(f"  {c['threshold']:>9} "
+              f"{c['passes_kept']:>5}/{c['passes_total']:<4} {c['kept_pct']:>4.0f}% "
+              f"{ci_str(c['kept_lo'], c['kept_hi'], pct=True):>14} "
+              f"${c['cost_usd']:>9.4f} {c['saved_pct']:>6.0f}% "
+              f"{ci_str(c['saved_lo'], c['saved_hi'], pct=True):>14}")
 
     best = analysis.best_threshold(conn)
     print()

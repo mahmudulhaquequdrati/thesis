@@ -73,6 +73,21 @@ Pass rate declines monotonically with how long the model reasons:
 Billed non-answers — calls charged in full for zero usable output — average
 11,878 reasoning tokens against 1,849 for passing calls.
 
+**(b2) Cost per correct answer spans 305×.** Over the 107 problems that have
+both effort arms graded:
+
+| config | n | solved | CPC | 95% CI |
+|---|---|---|---|---|
+| deepseek-v4-flash \| off | 107 | 74 | **$0.00021** | [0.00015, 0.00028] |
+| qwen3.5-9b \| off | 102 | 52 | $0.00058 | [0.00041, 0.00082] |
+| deepseek-v4-flash \| high | 70 | 66 | $0.00193 | [0.00150, 0.00237] |
+| deepseek-v4-pro \| high | 70 | 66 | $0.01224 | [0.00916, 0.01566] |
+| kimi-k2.6 \| high | 22 | 21 | **$0.06320** | [0.03937, 0.09247] |
+
+**Five adjacent pairs have overlapping intervals**, so their ordering is not
+established despite distinct point estimates. That is the reason §10.2 asks for
+bootstrapped CPC, and it would have been invisible without them.
+
 **(c) The platform advertises controls it does not enforce.** Two instances:
 
 * *Provider routing.* One model slug is served by 18 providers at $0.87–$3.48
@@ -110,15 +125,18 @@ above 10,000 reasoning tokens succeeded**.
 What survives is an honest tradeoff curve, which was always the intended
 deliverable:
 
-| abort at | solutions kept | cost saved |
-|---|---|---|
-| 16,000 | 212/242 (88%) | **49%** |
-| 12,000 | 192/242 (79%) | 64% |
-| 10,000 | 186/242 (77%) | 72% |
-| 6,000 | 138/242 (57%) | 90% |
+| abort at | solutions kept | 95% CI | cost saved | 95% CI |
+|---|---|---|---|---|
+| 16,000 | 212/242 (88%) | [82, 92]% | **49%** | [35, 61]% |
+| 12,000 | 192/242 (79%) | [72, 86]% | 64% | [52, 74]% |
+| 10,000 | 186/242 (77%) | [69, 83]% | 72% | [62, 80]% |
+| 6,000 | 138/242 (57%) | [48, 66]% | 90% | [86, 94]% |
 
 Half the cost for 12% of solutions is a usable operating point. There is no
-setting that costs nothing. **The curve is the deliverable, and it exists
+setting that costs nothing. Intervals are a seeded percentile bootstrap
+resampling *problems* (n=108), not cells — two cells on one problem are not
+independent observations of difficulty. They are wide, and deliberately shown
+that way. **The curve is the deliverable, and it exists
 whether or not any router works** — which is the main reason I prefer this
 framing.
 
@@ -127,6 +145,11 @@ models to think less, so runtime monitoring is not a redundant mechanism.
 
 ## 5. Honest limitations
 
+* **Most per-config numbers are not comparable, and the report says so.** The
+  `off` arm covers 320 problems, the `high` arm 51–104, the held-out model
+  16–23. Every comparable statistic is therefore computed over the **107
+  problems with both arms graded**, with the denominator and per-config `n`
+  printed beside it. Balancing would cost ~$1.50.
 * **Coverage is uneven.** 1,373 generations over 320 problems, but the
   no-reasoning arm is far more complete (1,025 calls) than the thinking arm
   (348). Buying stopped at a $6.00 self-imposed cap with $9.75 of balance

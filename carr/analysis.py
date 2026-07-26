@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from carr.stats import bootstrap_ci, proportion, ratio
+
 # Actual cost where OpenRouter has told us, our estimate otherwise. Never the
 # estimate alone -- see the provider-pinning finding in THESIS.md section 12.
 _COST = "COALESCE(g.cost_actual_usd, g.cost_computed_usd)"
@@ -257,3 +259,216 @@ def censoring(conn, max_tokens: int | None = None) -> list[dict]:
         ORDER BY pct DESC
     """).fetchall()
     return [dict(r) for r in rows]
+
+
+# ------------------------------------------------------- comparable statistics
+#
+# The grid is unbalanced: the `off` configs have 320 problems each, the `high`
+# configs 51-104, and the held-out model 16-23. A cost-accuracy number computed
+# per config over THAT config's own problems compares models on different exams
+# and is not a frontier, however it is labelled.
+#
+# So everything below takes a fixed problem set and states it. `paired_problems`
+# supplies the honest default: problems where both effort arms have a graded
+# result, currently 107 of 320.
+
+
+def paired_problems(conn, config_ids: list[int] | None = None) -> list[str]:
+    """Problems where EVERY named config has a graded, billed result.
+
+    Defaults to requiring both effort arms (at least one `off` and one `high`),
+    which is the comparison the thesis turns on. Pass explicit `config_ids` to
+    require a specific set -- but note only 5 problems have all ten.
+
+    Infrastructure failures are excluded via _INFRA, so a problem whose only
+    thinking row was a 429 does not count as paired: nothing ran, so there is
+    nothing to compare.
+    """
+    if config_ids:
+        marks = ",".join("?" * len(config_ids))
+        rows = conn.execute(f"""
+            SELECT g.problem_id
+            FROM generations g
+            JOIN results r ON r.gen_id = g.gen_id
+            WHERE {_REAL} AND NOT {_INFRA} AND g.config_id IN ({marks})
+            GROUP BY g.problem_id
+            HAVING COUNT(DISTINCT g.config_id) = ?
+            ORDER BY g.problem_id
+        """, [*config_ids, len(config_ids)]).fetchall()
+    else:
+        rows = conn.execute(f"""
+            SELECT g.problem_id
+            FROM generations g
+            JOIN configs c ON c.config_id = g.config_id
+            JOIN results r ON r.gen_id = g.gen_id
+            WHERE {_REAL} AND NOT {_INFRA}
+            GROUP BY g.problem_id
+            HAVING SUM(CASE WHEN c.effort_label = 'off' THEN 1 ELSE 0 END) > 0
+               AND SUM(CASE WHEN c.effort_label != 'off' THEN 1 ELSE 0 END) > 0
+            ORDER BY g.problem_id
+        """).fetchall()
+    return [r[0] for r in rows]
+
+
+def _per_problem_config(conn, problem_ids: list[str]) -> dict[int, list[dict]]:
+    """{config_id: [one row per problem]} restricted to `problem_ids`.
+
+    One row per (config, problem) so the bootstrap can resample PROBLEMS. Cells
+    on the same problem are not independent observations of difficulty, so
+    resampling cells rather than problems would understate every interval.
+    """
+    if not problem_ids:
+        return {}
+    marks = ",".join("?" * len(problem_ids))
+    rows = conn.execute(f"""
+        SELECT g.config_id, g.problem_id,
+               {_COST} AS cost,
+               COALESCE(g.completion_tokens, 0) AS tokens,
+               CASE WHEN {_WASTED} THEN 0 ELSE COALESCE(r.passed, 0) END AS solved
+        FROM generations g
+        JOIN results r ON r.gen_id = g.gen_id
+        WHERE {_REAL} AND NOT {_INFRA} AND g.problem_id IN ({marks})
+    """, problem_ids).fetchall()
+
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        out.setdefault(r["config_id"], []).append(
+            {"problem_id": r["problem_id"], "cost": r["cost"] or 0.0,
+             "tokens": r["tokens"] or 0, "solved": int(r["solved"])})
+    return out
+
+
+def _config_names(conn) -> dict[int, tuple[str, str]]:
+    """{config_id: (model_slug, effort_label)} -- labels for reporting."""
+    return {r["config_id"]: (r["model_slug"], r["effort_label"])
+            for r in conn.execute(
+                "SELECT config_id, model_slug, effort_label FROM configs")}
+
+
+def cost_per_correct(conn, problem_ids: list[str] | None = None, *,
+                     seed: int = 0, n_resamples: int = 2000) -> list[dict]:
+    """CPC and TPC per config, over ONE fixed problem set, with intervals.
+
+    CPC is total dollars divided by number solved (THESIS.md section 13: "the
+    headline economic metric"). TPC is the same, token-denominated.
+
+    Both are ratios of sums, so the bootstrap recomputes sum/sum on each
+    resample rather than averaging per-problem ratios -- those are different
+    quantities and the second one is wrong.
+
+    `n_resamples` is lower than the stats default because this runs once per
+    config in an interactive report; the intervals are stable well below 10,000.
+    """
+    ids = problem_ids if problem_ids is not None else paired_problems(conn)
+    by_config = _per_problem_config(conn, ids)
+    names = _config_names(conn)
+
+    out = []
+    for config_id, rows in by_config.items():
+        solved = sum(r["solved"] for r in rows)
+        total_usd = sum(r["cost"] for r in rows)
+        total_tok = sum(r["tokens"] for r in rows)
+        slug, effort = names.get(config_id, ("?", "?"))
+
+        cpc = total_usd / solved if solved else None
+        tpc = total_tok / solved if solved else None
+        if solved:
+            cpc_lo, cpc_hi = bootstrap_ci(
+                rows, ratio(lambda r: r["cost"], lambda r: r["solved"]),
+                seed=seed, n_resamples=n_resamples)
+            tpc_lo, tpc_hi = bootstrap_ci(
+                rows, ratio(lambda r: r["tokens"], lambda r: r["solved"]),
+                seed=seed, n_resamples=n_resamples)
+        else:
+            cpc_lo = cpc_hi = tpc_lo = tpc_hi = float("nan")
+
+        out.append({
+            "config_id": config_id, "model_slug": slug, "effort_label": effort,
+            "n_problems": len(rows), "solved": solved,
+            "total_usd": total_usd, "cpc_usd": cpc, "cpc_lo": cpc_lo, "cpc_hi": cpc_hi,
+            "total_tokens": total_tok, "tpc": tpc, "tpc_lo": tpc_lo, "tpc_hi": tpc_hi,
+        })
+    out.sort(key=lambda r: (r["cpc_usd"] is None, r["cpc_usd"] or 0))
+    return out
+
+
+def pass_rate_ci(conn, problem_ids: list[str] | None = None, *,
+                 seed: int = 0, n_resamples: int = 2000) -> list[dict]:
+    """Per-config pass rate over a fixed problem set, with an interval."""
+    ids = problem_ids if problem_ids is not None else paired_problems(conn)
+    by_config = _per_problem_config(conn, ids)
+    names = _config_names(conn)
+    out = []
+    for config_id, rows in by_config.items():
+        slug, effort = names.get(config_id, ("?", "?"))
+        lo, hi = bootstrap_ci(rows, proportion(lambda r: r["solved"] == 1),
+                              seed=seed, n_resamples=n_resamples)
+        out.append({"config_id": config_id, "model_slug": slug,
+                    "effort_label": effort, "n": len(rows),
+                    "solved": sum(r["solved"] for r in rows),
+                    "pct": 100.0 * sum(r["solved"] for r in rows) / max(1, len(rows)),
+                    "lo": lo, "hi": hi})
+    out.sort(key=lambda r: -r["pct"])
+    return out
+
+
+def abort_curve_ci(conn, thresholds=(2000, 4000, 6000, 8000, 10000, 12000, 16000),
+                   *, seed: int = 0, n_resamples: int = 2000) -> list[dict]:
+    """The abort curve with intervals on both axes, resampled by PROBLEM.
+
+    The headline deliverable, and the one whose sample is thinnest -- the
+    10k-20k band rests on ~58 observations. An interval here is the difference
+    between a claim and a guess.
+    """
+    rows = conn.execute(f"""
+        SELECT g.problem_id,
+               COALESCE(g.reasoning_tokens, 0) AS think,
+               {_COST} AS cost,
+               CASE WHEN {_WASTED} THEN 0 ELSE COALESCE(r.passed, 0) END AS solved
+        FROM generations g
+        JOIN configs c ON c.config_id = g.config_id
+        LEFT JOIN results r ON r.gen_id = g.gen_id
+        WHERE {_REAL} AND NOT {_INFRA} AND c.effort_label != 'off'
+    """).fetchall()
+    if not rows:
+        return []
+
+    # Group by problem: the resampling unit is the problem, not the cell.
+    by_problem: dict[str, list[dict]] = {}
+    for r in rows:
+        by_problem.setdefault(r["problem_id"], []).append(
+            {"think": r["think"] or 0, "cost": r["cost"] or 0.0,
+             "solved": int(r["solved"])})
+    problems = list(by_problem.values())
+
+    baseline = sum(c["cost"] for cells in problems for c in cells)
+    total_solved = sum(c["solved"] for cells in problems for c in cells)
+
+    out = []
+    for t in thresholds:
+        kept = [c for cells in problems for c in cells if c["think"] <= t]
+        saved_stat = lambda sample, t=t: (                       # noqa: E731
+            None if (b := sum(c["cost"] for cells in sample for c in cells)) <= 0
+            else 100.0 * (1 - sum(c["cost"] for cells in sample for c in cells
+                                  if c["think"] <= t) / b))
+        kept_stat = lambda sample, t=t: (                        # noqa: E731
+            None if (tot := sum(c["solved"] for cells in sample for c in cells)) <= 0
+            else 100.0 * sum(c["solved"] for cells in sample for c in cells
+                             if c["think"] <= t) / tot)
+        s_lo, s_hi = bootstrap_ci(problems, saved_stat, seed=seed,
+                                  n_resamples=n_resamples)
+        k_lo, k_hi = bootstrap_ci(problems, kept_stat, seed=seed,
+                                  n_resamples=n_resamples)
+        cost = sum(c["cost"] for c in kept)
+        out.append({
+            "threshold": t,
+            "passes_kept": sum(c["solved"] for c in kept),
+            "passes_total": total_solved,
+            "kept_pct": 100.0 * sum(c["solved"] for c in kept) / max(1, total_solved),
+            "kept_lo": k_lo, "kept_hi": k_hi,
+            "cost_usd": cost,
+            "saved_pct": 100.0 * (1 - cost / baseline) if baseline else 0.0,
+            "saved_lo": s_lo, "saved_hi": s_hi,
+            "n_problems": len(problems),
+        })
+    return out

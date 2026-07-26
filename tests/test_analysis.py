@@ -257,3 +257,79 @@ def test_censoring_is_reported_not_hidden(conn):
 def test_no_censoring_reported_when_nothing_was_cut_off(conn):
     add(conn, "P/ok", HIGH, think=1000, cost=0.01, passed=True)
     assert analysis.censoring(conn) == []
+
+
+# --------------------------------------------- comparability and economics
+
+
+def test_paired_set_requires_both_effort_arms(conn):
+    """A problem with only no-reasoning results cannot inform the comparison."""
+    add(conn, "P/both", HIGH, think=500, cost=0.01, passed=True)
+    add(conn, "P/both", OFF, think=0, cost=0.001, passed=False)
+    add(conn, "P/offonly", OFF, think=0, cost=0.001, passed=True)
+    assert analysis.paired_problems(conn) == ["P/both"]
+
+
+def test_unbilled_failures_do_not_make_a_problem_paired(conn):
+    """A 429 means nothing ran, so there is nothing to compare against."""
+    add(conn, "P/x", OFF, think=0, cost=0.001, passed=True)
+    add(conn, "P/x", HIGH, think=0, cost=0.0, passed=False,
+        error="RateLimitError: 429", graded=True)
+    assert analysis.paired_problems(conn) == []
+
+
+def test_cpc_is_total_cost_over_total_solved(conn):
+    """The headline economic metric, computed the way section 13 defines it."""
+    add(conn, "P/1", HIGH, think=100, cost=0.010, passed=True)
+    add(conn, "P/2", HIGH, think=100, cost=0.020, passed=True)
+    add(conn, "P/3", HIGH, think=100, cost=0.030, passed=False)
+
+    row = next(r for r in analysis.cost_per_correct(
+        conn, ["P/1", "P/2", "P/3"], seed=1, n_resamples=200)
+        if r["config_id"] == HIGH)
+    assert row["solved"] == 2
+    assert row["total_usd"] == pytest.approx(0.06)
+    assert row["cpc_usd"] == pytest.approx(0.03), "CPC must be 0.06/2, not a mean"
+
+
+def test_cpc_is_none_when_a_config_solved_nothing(conn):
+    """Real on the hard tier. Must not divide by zero."""
+    add(conn, "P/1", HIGH, think=100, cost=0.01, passed=False)
+    row = next(r for r in analysis.cost_per_correct(conn, ["P/1"], seed=1,
+                                                    n_resamples=50)
+               if r["config_id"] == HIGH)
+    assert row["cpc_usd"] is None
+    assert row["solved"] == 0
+
+
+def test_cpc_interval_brackets_the_point_estimate(conn):
+    for i in range(30):
+        add(conn, f"P/{i}", HIGH, think=100, cost=0.01, passed=(i % 2 == 0))
+    row = next(r for r in analysis.cost_per_correct(
+        conn, [f"P/{i}" for i in range(30)], seed=5, n_resamples=400)
+        if r["config_id"] == HIGH)
+    assert row["cpc_lo"] <= row["cpc_usd"] <= row["cpc_hi"]
+
+
+def test_abort_curve_ci_resamples_problems_not_cells(conn):
+    """Cells on one problem are not independent observations of difficulty.
+
+    Resampling cells would understate every interval, which is the failure mode
+    that makes a bootstrap worse than useless.
+    """
+    for i in range(20):
+        # two thinking cells per problem, deliberately correlated
+        add(conn, f"P/{i}", HIGH, think=1000, cost=0.01, passed=True)
+    curve = analysis.abort_curve_ci(conn, thresholds=(5000,), seed=1,
+                                    n_resamples=300)
+    assert curve[0]["n_problems"] == 20, "resampling unit is not the problem"
+
+
+def test_abort_curve_ci_intervals_are_ordered(conn):
+    for i in range(25):
+        add(conn, f"P/{i}", HIGH, think=1000 * (i + 1), cost=0.01,
+            passed=(i < 12))
+    for c in analysis.abort_curve_ci(conn, seed=2, n_resamples=300):
+        if not (c["kept_lo"] != c["kept_lo"]):        # skip NaN
+            assert c["kept_lo"] <= c["kept_hi"]
+            assert c["saved_lo"] <= c["saved_hi"]
