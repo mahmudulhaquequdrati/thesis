@@ -39,11 +39,17 @@ class Budget:
 class GenerationSettings:
     temperature: float
     n: int
-    max_tokens: int
+    # Per effort label, e.g. {"off": 16000, "high": 48000}. A plain int is
+    # accepted and applied to every effort.
+    max_tokens: dict
     retries: int
     concurrency: int = 1
     grade_concurrency: int = 4
     rate_limit_retries: int = 3
+
+    def tokens_for(self, effort_label: str) -> int:
+        """Ceiling for one effort level, falling back to the largest configured."""
+        return int(self.max_tokens.get(effort_label, max(self.max_tokens.values())))
 
 
 @dataclass
@@ -63,12 +69,25 @@ class Experiment:
         return self.strata["grid"]
 
 
+def _generation(raw: dict) -> GenerationSettings:
+    g = dict(raw)
+    mt = g.get("max_tokens")
+    if not isinstance(mt, dict):
+        g["max_tokens"] = {"off": int(mt), "high": int(mt)}
+    else:
+        # str(k) because YAML 1.1 turns a bare `off` key into the boolean False.
+        # The file quotes its keys, but a caller's dict might not.
+        g["max_tokens"] = {("off" if k is False else "on" if k is True else str(k)): int(v)
+                           for k, v in mt.items()}
+    return GenerationSettings(**g)
+
+
 def load_experiment(path: Path | str | None = None) -> Experiment:
     raw = yaml.safe_load(Path(path or DEFAULT_CONFIG).read_text())
     s = raw["sampling"]
     return Experiment(
         budget=Budget(**raw["budget"]),
-        generation=GenerationSettings(**raw["generation"]),
+        generation=_generation(raw["generation"]),
         seed=s["seed"],
         strata={"pilot": s["pilot"]["strata"], "grid": s["grid"]["strata"]},
         held_out_subset=int(s.get("held_out_subset", 100)),

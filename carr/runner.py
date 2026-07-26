@@ -70,15 +70,22 @@ class Cell:
                             EXPECTED_OUT.get(self.config.effort_label, 3500),
                             self.config.price_in_per_m, self.config.price_out_per_m)
 
-    def worst_usd(self, max_tokens: int) -> float:
+    def max_tokens_for(self, max_tokens) -> int:
+        """This cell's ceiling. `max_tokens` may be an int or a per-effort dict."""
+        if isinstance(max_tokens, dict):
+            return int(max_tokens.get(self.config.effort_label,
+                                      max(max_tokens.values())))
+        return int(max_tokens)
+
+    def worst_usd(self, max_tokens) -> float:
         """What this call could cost if it ignores max_tokens (see the constant)."""
         return WORST_CASE_SAFETY * compute_cost(
-            self.prompt_tokens, max_tokens,
+            self.prompt_tokens, self.max_tokens_for(max_tokens),
             self.config.price_in_per_m, self.config.price_out_per_m)
 
-    def requested_usd(self, max_tokens: int) -> float:
+    def requested_usd(self, max_tokens) -> float:
         """What it costs if the provider honours max_tokens. For reporting only."""
-        return compute_cost(self.prompt_tokens, max_tokens,
+        return compute_cost(self.prompt_tokens, self.max_tokens_for(max_tokens),
                             self.config.price_in_per_m, self.config.price_out_per_m)
 
 
@@ -183,7 +190,7 @@ def _store(conn, cell, gen, temperature: float) -> tuple[int | None, float]:
     return gen_id, cost
 
 
-def buy(conn, cells: list[Cell], provider, *, max_tokens: int,
+def buy(conn, cells: list[Cell], provider, *, max_tokens,
         abort_at_usd: float, warn_at_usd: float | None = None,
         temperature: float = 0.0, concurrency: int = 1,
         on_row=None) -> RunReport:
@@ -223,7 +230,8 @@ def buy(conn, cells: list[Cell], provider, *, max_tokens: int,
                     break
                 fut = pool.submit(provider.complete, nxt.prompt, nxt.config,
                                   problem_id=nxt.problem_id,
-                                  max_tokens=max_tokens, temperature=temperature)
+                                  max_tokens=nxt.max_tokens_for(max_tokens),
+                                  temperature=temperature)
                 inflight[fut] = (nxt, w)
                 reserved += w
                 i += 1
@@ -314,7 +322,7 @@ def grade_pending(conn, *, concurrency: int = 4, on_graded=None) -> tuple[int, i
     return graded, passed
 
 
-def run(conn, cells: list[Cell], provider, *, max_tokens: int,
+def run(conn, cells: list[Cell], provider, *, max_tokens,
         abort_at_usd: float, warn_at_usd: float | None = None,
         temperature: float = 0.0, concurrency: int = 1,
         grade_concurrency: int = 4, on_row=None) -> RunReport:

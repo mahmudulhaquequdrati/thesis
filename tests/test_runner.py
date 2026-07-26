@@ -257,3 +257,27 @@ def test_experiment_config_loads_and_is_sane():
     assert exp.generation.temperature == 0.0
     assert exp.generation.retries == 0, "a retry loop defeats the cost cap"
     assert sum(exp.pilot_strata.values()) > 0
+
+
+def test_off_is_not_parsed_as_a_boolean():
+    """YAML 1.1 turns a bare `off` key into False, silently losing the setting.
+
+    It did exactly that: no-reasoning calls fell back to the 48k ceiling
+    instead of 16k, so nothing capped the model that was rambling for 300
+    seconds a call. The config quotes its keys; this pins the behaviour.
+    """
+    exp = load_experiment()
+    assert set(exp.generation.max_tokens) == {"off", "high"}, \
+        f"max_tokens keys are {set(exp.generation.max_tokens)} -- `off` became a bool?"
+    assert exp.generation.tokens_for("off") < exp.generation.tokens_for("high")
+
+
+def test_thinking_gets_more_headroom_than_answering():
+    """Reasoning must not be truncated; a code answer never needs 16k tokens.
+
+    Measured over 402 real calls: no passing solution exceeded 13,072 tokens,
+    and no off-call that ran past 16k ever passed.
+    """
+    exp = load_experiment()
+    assert exp.generation.tokens_for("high") >= 32000
+    assert 8000 <= exp.generation.tokens_for("off") <= 20000
