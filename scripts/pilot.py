@@ -74,7 +74,7 @@ def main() -> None:
     cells, skipped = runner.plan(
         conn, problem_ids, configs,
         subset_size=None if args.set == "pilot" else exp.held_out_subset,
-        seed=exp.seed)
+        seed=exp.seed, expected_out=exp.expected_out)
 
     already = runner.lifetime_spend(conn)
     max_tokens = exp.generation.max_tokens

@@ -88,6 +88,22 @@ generation:
 abort:
   reasoning_tokens: null
 
+# Mean completion tokens per call, used ONLY to estimate cost and to order
+# cheapest-first. Never used by the cost cap, which uses the worst case.
+#
+# MEASURED from 1,132 real calls on 2026-07-27, replacing guesses of 350 and
+# 3,500. The `off` figure was wrong by 9x, which made the 318-problem grid look
+# like $4.59 when it is really $10.34 -- an error large enough to have run the
+# budget into the cap and left a lopsided grid (all the cheap cells, none of
+# the expensive ones that carry the finding).
+#
+# LiveCodeBench is why: its problems make even a no-reasoning model write
+# thousands of tokens of answer. Re-measure with scripts/results.py whenever
+# the problem mix changes.
+expected_completion_tokens:
+  "off": 3165
+  "high": 4134
+
 sampling:
   # Fixed everywhere: sampling, splits, bootstrap. Reproducibility is graded.
   seed: 20260726

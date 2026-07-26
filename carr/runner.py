@@ -34,9 +34,14 @@ from carr.cost import compute_cost, fmt_usd
 from carr.execute.verify import grade
 from carr.extract import extract_code
 
-# Rough per-call output-token expectation. Used ONLY for ordering and for the
-# printed estimate -- never for the cap, which uses the worst case.
-EXPECTED_OUT = {"off": 350, "high": 3500}
+# Per-call output-token expectation. Used ONLY for ordering and the printed
+# estimate -- never for the cap, which uses the worst case.
+#
+# MEASURED, not guessed. The original 350/3500 understated `off` by 9x, because
+# LiveCodeBench problems make even no-reasoning models write thousands of
+# tokens of answer. That made a $10.34 grid look like $4.59. Overridden from
+# config/experiment.yaml; these are the fallback.
+EXPECTED_OUT = {"off": 3165, "high": 4134}
 
 # max_tokens turns out NOT to be a hard bound. On 2026-07-26 qwen3.5-9b
 # returned 35,837 completion tokens against a max_tokens of 16,000 -- 2.24x --
@@ -65,9 +70,13 @@ class Cell:
     request_hash: str
     prompt_tokens: int
 
+    expected_out: dict | None = None
+
     def expected_usd(self) -> float:
+        table = self.expected_out or EXPECTED_OUT
         return compute_cost(self.prompt_tokens,
-                            EXPECTED_OUT.get(self.config.effort_label, 3500),
+                            table.get(self.config.effort_label,
+                                      max(table.values())),
                             self.config.price_in_per_m, self.config.price_out_per_m)
 
     def max_tokens_for(self, max_tokens) -> int:
@@ -118,7 +127,8 @@ def held_out_subset(problem_ids: list[str], size: int, seed: int) -> set[str]:
 
 
 def plan(conn, problem_ids: list[str], configs: list, *,
-         subset_size: int | None = None, seed: int = 0) -> tuple[list[Cell], int]:
+         subset_size: int | None = None, seed: int = 0,
+         expected_out: dict | None = None) -> tuple[list[Cell], int]:
     """Build the work list, cheapest expected first, skipping bought cells.
 
     Configs marked `subset_only` run on a subset of problems rather than all of
@@ -150,7 +160,7 @@ def plan(conn, problem_ids: list[str], configs: list, *,
                 skipped += 1
                 continue
             cells.append(Cell(problem_id, problem["benchmark"], prompt, cfg, h,
-                              prompt_tokens))
+                              prompt_tokens, expected_out=expected_out))
 
     # Global cheapest-first: every `off` config across every problem runs before
     # any `high` one, so a cap abort leaves the cheap half of the grid complete.

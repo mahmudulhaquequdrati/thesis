@@ -56,6 +56,7 @@ class GenerationSettings:
 class Experiment:
     budget: Budget
     generation: GenerationSettings
+    expected_out: dict
     seed: int
     strata: dict[str, dict[str, int]]
     held_out_subset: int = 100
@@ -85,9 +86,12 @@ def _generation(raw: dict) -> GenerationSettings:
 def load_experiment(path: Path | str | None = None) -> Experiment:
     raw = yaml.safe_load(Path(path or DEFAULT_CONFIG).read_text())
     s = raw["sampling"]
+    eo = raw.get("expected_completion_tokens") or {}
     return Experiment(
         budget=Budget(**raw["budget"]),
         generation=_generation(raw["generation"]),
+        expected_out={("off" if k is False else "on" if k is True else str(k)): int(v)
+                      for k, v in eo.items()},
         seed=s["seed"],
         strata={"pilot": s["pilot"]["strata"], "grid": s["grid"]["strata"]},
         held_out_subset=int(s.get("held_out_subset", 100)),
