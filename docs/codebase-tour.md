@@ -423,7 +423,7 @@ Its current output is the project's central open question:
 
 | Mean thinking tokens | Grid cost | |
 |---|---|---|
-| 3,500 | **$3.55** | fits the $6.00 abort threshold |
+| 3,500 | ~~$3.55~~ | superseded — old prices and a 300-problem set. The re-weighted grid is **$4.59**; run `pilot.py --set grid --dry-run` |
 | 6,000 | **$5.89** | **over** — supports ~203 problems |
 | 9,000 | **$8.69** | **over** — supports ~138 problems |
 

@@ -17,13 +17,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from carr.effort import load_configs  # noqa: E402
+from carr.experiment import load_experiment  # noqa: E402
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--problems", type=int, default=300,
                     help="problems in the full grid")
-    ap.add_argument("--subset", type=int, default=100,
+    # Default comes from config/experiment.yaml so this script and the runner
+    # cannot drift apart on how many problems the held-out model sees.
+    ap.add_argument("--subset", type=int, default=load_experiment().held_out_subset,
                     help="problems for the held-out (RQ5) model")
     # 600 was the pre-Day-2 guess. Day 2 measured the real medians: 99 tokens
     # for HumanEval+ and 36 for MBPP+, ~6x smaller. 100 is the honest default;

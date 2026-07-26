@@ -131,7 +131,6 @@ def main() -> None:
                 for i in issues:
                     print(f"         {i}")
             else:
-                p = live["pricing"]  # noqa: F841
                 print(f"  ok     {slug:28} {entry['provider']:17} "
                       f"{str(entry.get('quantization')):>8}  "
                       f"${entry['price_in_per_m']:.4f}/${entry['price_out_per_m']:.4f} per M")
@@ -146,7 +145,7 @@ def main() -> None:
             if live is None:
                 print(f"    {entry['slug']:34} no longer served")
             else:
-                p = live["pricing"]  # noqa: F841
+                p = live["pricing"]
                 print(f"    {entry['slug']:34} "
                       f"${float(p['prompt']) * 1e6:.4f} / "
                       f"${float(p['completion']) * 1e6:.4f} per M")

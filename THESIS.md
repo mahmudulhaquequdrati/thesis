@@ -18,7 +18,7 @@
 | **Next action** | **Settle three things before the grid:** (a) verify the $0-cancellation result holds across providers and can be observed *live* in a stream, (b) raise `max_tokens` 16k → 32k so truncation stops confounding the effort axis, (c) rebuild the problem set from LCB medium/hard. Then the grid (~$2–4). |
 | ~~Next action~~ | ~~**Run the pilot**~~ `uv run python scripts/pilot.py --dry-run` prices it free: **expected $0.29**, this run capped at **$0.37** (1.25× the estimate). It measures the two numbers that size the grid: thinking tokens on *hard* problems, and the saturation rate. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
 | **Spend to date** | **$0.583** of **$15.00 loaded** ($14.42 left; runner aborts at $6.00). Grid now priced at **$4.59** — fits. |
-| **Rows in dataset** | **149 real** (135 graded). Problem pool **884** (LCB v5+v6 = 342, of which 154 hard / 104 medium). Of ~2,600 (~300 problems × 10 configs — final count set by the pilot). Problem pool: **717 loaded** (HumanEval+ 164, MBPP+ 378, LiveCodeBench 175) + 10 configs |
+| **Rows in dataset** | **149 real** (135 graded) of a **2,744-cell grid** (318 problems × 8 full configs + 100-problem held-out subset × 2). Problem pool **884**: HumanEval+ 164, MBPP+ 378, LiveCodeBench 342 (154 hard / 104 medium) |
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
@@ -426,15 +426,20 @@ Run `uv run python scripts/estimate_cost.py` for live arithmetic over the verifi
 
 At the current assumptions (300 problems, **100 in-tok** — the Day 2 *measured*
 median, not the old 600 guess — 350 out-tok off, 3,500 out-tok thinking) the grid
-costs **$3.55**, comfortably inside the $6.00 abort threshold — where at $4.00 loaded it was a rounding error rather than a margin.
+cost **$3.55** at the old (cheapest-provider) prices and a 300-problem set. Superseded — see the priced grid above.
 
 **⚠️ The whole plan hangs on one unmeasured number: mean thinking tokens.**
 
 | Mean thinking tokens | Grid cost | Verdict |
 |---|---|---|
-| 3,500 | **$3.55** | Fits, barely |
-| 6,000 | **$5.89** | **Over** — supports ~203 problems |
-| 9,000 | **$8.69** | **Over** — supports ~138 problems |
+| 3,500 | ~~$3.55~~ | superseded: old prices, 300 problems |
+| 6,000 | ~~$5.89~~ | superseded |
+| 9,000 | ~~$8.69~~ | superseded |
+
+**Measured instead of guessed (pilot, 2026-07-26):** mean reasoning tokens are
+963 on the easy benchmarks, 2,955 / 7,009 / 9,449 on LCB easy / medium / hard.
+The grid is weighted to medium and hard, which is why it prices at $4.59 rather
+than at the 3,500-token row above.
 
 *(Reproduce: `uv run python scripts/estimate_cost.py --think-tokens 6000`.
 These replace two earlier and mutually inconsistent tables — $3.82/$6.15/$8.96

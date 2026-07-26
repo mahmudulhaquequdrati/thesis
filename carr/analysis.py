@@ -27,9 +27,21 @@ from dataclasses import dataclass
 _COST = "COALESCE(g.cost_actual_usd, g.cost_computed_usd)"
 _REAL = "COALESCE(g.is_mock, 0) = 0"
 
-# A call is "wasted" if it was billed but yielded nothing gradeable: the stream
-# hit max_tokens mid-thought, or the provider errored after producing tokens.
-_WASTED = "(g.finish_reason = 'length' OR g.error IS NOT NULL)"
+# Whether a call was BILLED is what separates a model outcome from an
+# infrastructure one, and the distinction is not cosmetic.
+#
+# A 404 from a pinned provider, or a 429 when it is overloaded, says nothing
+# about the model -- but it produces a row with error set, and counting it as a
+# failure understates the pass rate. It costs $0, because nothing ran.
+#
+# A call that burned 16,000 tokens and returned no answer also has error set,
+# but it was billed in full and IS a model outcome -- the most expensive kind.
+#
+# So: billed and no usable answer = wasted. Not billed = infrastructure, and it
+# is excluded from every rate rather than silently scored as a failure.
+_INFRA = f"(g.error IS NOT NULL AND COALESCE({_COST}, 0) <= 0)"
+_WASTED = (f"(COALESCE({_COST}, 0) > 0 "
+           f"AND (g.finish_reason = 'length' OR g.error IS NOT NULL))")
 
 
 def saturation(conn) -> list[dict]:
@@ -48,7 +60,7 @@ def saturation(conn) -> list[dict]:
         JOIN configs c  ON c.config_id = g.config_id
         JOIN problems p ON p.problem_id = g.problem_id
         LEFT JOIN results r ON r.gen_id = g.gen_id
-        WHERE {_REAL}
+        WHERE {_REAL} AND NOT {_INFRA}
         GROUP BY tier, effort
         ORDER BY pct
     """).fetchall()
@@ -69,7 +81,7 @@ def discriminating_problems(conn) -> dict[str, int]:
                    COUNT(*) AS n_cells
             FROM generations g
             LEFT JOIN results r ON r.gen_id = g.gen_id
-            WHERE {_REAL}
+            WHERE {_REAL} AND NOT {_INFRA}
             GROUP BY g.problem_id
         )
         SELECT CASE WHEN n_pass = 0        THEN 'none solved'
@@ -92,7 +104,8 @@ def reasoning_by_tier(conn) -> list[dict]:
         FROM generations g
         JOIN configs c  ON c.config_id = g.config_id
         JOIN problems p ON p.problem_id = g.problem_id
-        WHERE {_REAL} AND c.effort_label != 'off' AND g.reasoning_tokens > 0
+        WHERE {_REAL} AND NOT {_INFRA} AND c.effort_label != 'off'
+              AND g.reasoning_tokens > 0
         GROUP BY tier ORDER BY avg_reasoning
     """).fetchall()
     return [dict(r) for r in rows]
@@ -115,7 +128,7 @@ def waste(conn) -> list[dict]:
         FROM generations g
         JOIN configs c ON c.config_id = g.config_id
         LEFT JOIN results r ON r.gen_id = g.gen_id
-        WHERE {_REAL} AND c.effort_label != 'off'
+        WHERE {_REAL} AND NOT {_INFRA} AND c.effort_label != 'off'
         GROUP BY outcome ORDER BY avg_reasoning
     """).fetchall()
     return [dict(r) for r in rows]
@@ -159,13 +172,13 @@ def abort_curve(conn, thresholds=(2000, 3000, 4000, 5000, 6000, 8000,
     billed for cancelled streams, every number here would be wrong.
     """
     rows = conn.execute(f"""
-        SELECT g.reasoning_tokens AS think,
+        SELECT COALESCE(g.reasoning_tokens, 0) AS think,
                {_COST} AS cost,
                CASE WHEN {_WASTED} THEN 0 ELSE COALESCE(r.passed, 0) END AS ok
         FROM generations g
         JOIN configs c ON c.config_id = g.config_id
         LEFT JOIN results r ON r.gen_id = g.gen_id
-        WHERE {_REAL} AND c.effort_label != 'off' AND g.reasoning_tokens > 0
+        WHERE {_REAL} AND NOT {_INFRA} AND c.effort_label != 'off'
     """).fetchall()
     if not rows:
         return []

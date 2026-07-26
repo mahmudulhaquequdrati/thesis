@@ -15,7 +15,7 @@ Total spent so far: **$0.58**. Remaining: $14.42.
 
 A complete measurement harness, tested (60 tests):
 
-* 717 problems loaded — HumanEval+ (164), MBPP+ (378), LiveCodeBench (175)
+* 884 problems loaded — HumanEval+ (164), MBPP+ (378), LiveCodeBench (342: 154 hard, 104 medium, 84 easy)
 * 10 configurations — 5 open-weight models × reasoning off/on, via OpenRouter
 * Sandboxed grading for both benchmark families (LiveCodeBench needed a second
   execution path: stdin/stdout programs and `Solution`-class methods)

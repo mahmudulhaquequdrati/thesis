@@ -178,3 +178,61 @@ def test_empty_database_does_not_crash(conn):
     assert analysis.abort_curve(conn) == []
     assert analysis.best_threshold(conn) is None
     assert analysis.saturation(conn) == []
+
+
+# ------------------------------------------- infrastructure vs model outcomes
+
+
+def test_unbilled_errors_are_not_scored_as_model_failures(conn):
+    """A 404 or 429 says nothing about the model, and must not lower its rate.
+
+    With allow_fallbacks off, an overloaded pinned provider returns 429 and a
+    row is written with error set and no charge. Counting that as a failure
+    would understate the pass rate with pure infrastructure noise.
+    """
+    add(conn, "P/ok", HIGH, think=1000, cost=0.01, passed=True,
+        difficulty="hard")
+    add(conn, "P/429", HIGH, think=0, cost=0.0, passed=False,
+        difficulty="hard", error="RateLimitError: 429", graded=False)
+
+    tiers = {(r["tier"], r["effort"]): r for r in analysis.saturation(conn)}
+    row = tiers[("hard", "high")]
+    assert row["n"] == 1, "the unbilled 429 was counted in the denominator"
+    assert row["pct"] == 100.0
+
+
+def test_billed_non_answers_ARE_model_failures(conn):
+    """Burning 16k tokens and returning nothing is a model outcome, not noise.
+
+    It is also the most expensive outcome there is, so it must stay in the
+    waste table -- that is the finding.
+    """
+    add(conn, "P/burn", HIGH, think=16000, cost=0.02, passed=False,
+        finish="length", error="empty response", graded=False)
+    by = {r["outcome"]: r for r in analysis.waste(conn)}
+    assert by["wasted (no answer)"]["n"] == 1
+    assert by["wasted (no answer)"]["total_usd"] == pytest.approx(0.02)
+
+
+def test_unbilled_errors_are_excluded_from_the_abort_curve(conn):
+    """They cost nothing, so aborting them saves nothing -- and they are not
+    evidence either way about the threshold."""
+    add(conn, "P/ok", HIGH, think=1000, cost=0.01, passed=True)
+    add(conn, "P/404", HIGH, think=0, cost=0.0, passed=False,
+        error="NotFoundError: no endpoints", graded=False)
+    pt = analysis.abort_curve(conn, thresholds=(99999,))[0]
+    assert pt.baseline_usd == pytest.approx(0.01)
+    assert pt.passes_total == 1
+
+
+def test_a_thinking_call_with_no_reasoning_tokens_is_still_counted(conn):
+    """It is a real, billed data point and must not vanish from the curve.
+
+    abort_curve used to filter reasoning_tokens > 0, which silently dropped
+    these -- zero rows today, but it would have under-reported the baseline
+    the moment one appeared.
+    """
+    add(conn, "P/zero", HIGH, think=0, cost=0.004, passed=True)
+    pt = analysis.abort_curve(conn, thresholds=(99999,))[0]
+    assert pt.baseline_usd == pytest.approx(0.004)
+    assert pt.passes_total == 1
