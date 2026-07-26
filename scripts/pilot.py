@@ -64,7 +64,7 @@ def main() -> None:
 
     configs = load_configs()
     for cfg in configs:
-        db.upsert_config(conn, cfg.tier_index, cfg)
+        db.upsert_config(conn, cfg.config_id, cfg)
     conn.commit()
 
     strata = exp.pilot_strata if args.set == "pilot" else exp.grid_strata

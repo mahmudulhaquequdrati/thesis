@@ -52,7 +52,7 @@ def conn(tmp_path):
     c = db.connect(tmp_path / "t.sqlite")
     db.init_schema(c)
     for cfg in load_configs():
-        db.upsert_config(c, cfg.tier_index, cfg)
+        db.upsert_config(c, cfg.config_id, cfg)
     for i in range(4):
         db.upsert_problem(c, problem_id=f"T/{i}", benchmark="humaneval_plus",
                           prompt=f"def f{i}():\n    pass\n", entry_point="f",

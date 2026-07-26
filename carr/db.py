@@ -410,3 +410,67 @@ def migrate_request_hashes(conn: sqlite3.Connection) -> int:
             "UPDATE generations SET request_hash = ? WHERE gen_id = ?", updates)
         conn.commit()
     return len(updates)
+
+
+def repair_config_ids(conn: sqlite3.Connection) -> tuple[int, int]:
+    """Rebuild `configs` on stable ids and re-point generations at the right one.
+
+    Needed once, because config_id used to be a config's position in a
+    price-sorted list. Changing a price re-sorted it, so config_id 4 meant
+    deepseek-v4-pro before the change and qwen3.6-35b-a3b after -- and eight
+    already-bought generations ended up attributed to the wrong model. An
+    identity must never be derived from a value that is expected to move.
+
+    `request_hash` is the ground truth for the repair: it is a fingerprint of
+    (model, effort, prompt, params, problem) taken at request time, so
+    recomputing it for every config reveals exactly which one was asked for.
+    That is stronger than inferring from price, which is ambiguous between
+    models that happen to cost about the same.
+
+    Returns (configs_rewritten, generations_repointed). Idempotent.
+    """
+    from carr.effort import load_configs
+
+    configs = load_configs()
+    rows = conn.execute(
+        """SELECT g.gen_id, g.request_hash, g.problem_id, g.config_id, p.prompt
+           FROM generations g JOIN problems p ON p.problem_id = g.problem_id"""
+    ).fetchall()
+
+    resolved: dict[int, int] = {}
+    unresolved = 0
+    for r in rows:
+        for c in configs:
+            if request_hash(c.model_slug, c.effort_label, r["prompt"],
+                            c.params, r["problem_id"]) == r["request_hash"]:
+                resolved[r["gen_id"]] = c.config_id
+                break
+        else:
+            unresolved += 1
+    if unresolved:
+        raise RuntimeError(
+            f"{unresolved} generations could not be matched to any config by "
+            f"request_hash; refusing to guess. Restore from data/backups/.")
+
+    # Foreign keys are off only for the rewrite: generations point at rows that
+    # are about to be renumbered, so the intermediate state is inconsistent by
+    # construction. Re-checked before commit.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("DELETE FROM configs")
+        for c in configs:
+            upsert_config(conn, c.config_id, c)
+        for gen_id, cfg_id in resolved.items():
+            conn.execute("UPDATE generations SET config_id = ? WHERE gen_id = ?",
+                         (cfg_id, gen_id))
+        broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if broken:
+            conn.rollback()
+            raise RuntimeError(f"repair left {len(broken)} broken references; "
+                               f"rolled back")
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+    moved = sum(1 for r in rows if resolved[r["gen_id"]] != r["config_id"])
+    return len(configs), moved

@@ -3,8 +3,12 @@
 Why this exists: HumanEval+ and MBPP+ saturate. The first real grid cell had
 all 10 configs solve HumanEval/0, including every no-reasoning one. If every
 problem is solved by the cheapest config, "which config should I use" has the
-answer "the cheapest" and RQ4 has nothing to decide. LCB v6 is 80 hard and 52
-medium problems against 43 easy, which is the headroom that argument needs.
+answer "the cheapest" and there is nothing to decide. The pilot confirmed it:
+HumanEval+, MBPP+ and LCB-easy all pass 90-100% regardless of reasoning, so
+only LCB medium and hard carry any signal at all.
+
+Releases v5+v6 together give 342 problems -- 154 hard, 104 medium, 84 easy --
+so the usable tier is 258 rather than the 132 that v6 alone provided.
 
 READ THIS BEFORE CITING LCB AS CONTAMINATION-FREE -- it is not, for us:
 
@@ -21,8 +25,8 @@ READ THIS BEFORE CITING LCB AS CONTAMINATION-FREE -- it is not, for us:
 
 Format notes, both of which differ from evalplus:
 
-  * Two problem styles. AtCoder problems (112/175) are stdin->stdout programs.
-    LeetCode problems (63/175) ship `starter_code` and are graded by calling a
+  * Two problem styles. AtCoder problems (217/342) are stdin->stdout programs.
+    LeetCode problems (125/342) ship `starter_code` and are graded by calling a
     method. They need genuinely different execution, see carr/execute/verify.py.
   * NO canonical solutions. evalplus ships reference implementations, which is
     what test_canonical_solutions_pass uses to prove the harness works. LCB
@@ -45,10 +49,18 @@ CACHE_DIR = Path(user_cache_dir("carr"))
 
 # v6 is the final release. test6.jsonl is the incremental batch it added:
 # 175 problems, 2025-01-04 to 2025-04-06. ~134 MB, mostly test cases.
-RELEASE = "v6"
-FILENAME = "test6.jsonl"
-URL = ("https://huggingface.co/datasets/livecodebench/code_generation_lite"
-       f"/resolve/main/{FILENAME}")
+# LiveCodeBench ships incrementally: test.jsonl is v1, and test2..test6 each
+# add the problems introduced by that release. Newest first, because older
+# releases are MORE contamination-exposed -- v6 stops at 2025-04-06 and every
+# model on the roster is a 2026 release, so age only makes the exposure worse.
+#
+# The pilot showed the easy benchmarks are saturated (90-100% pass), leaving
+# only ~132 usable LCB medium/hard problems in the pool. That is too thin for
+# the abort threshold to be estimated on, which is why more releases are
+# loaded at all.
+RELEASES = ["test6.jsonl", "test5.jsonl"]
+URL_TEMPLATE = ("https://huggingface.co/datasets/livecodebench/code_generation_lite"
+                "/resolve/main/{filename}")
 
 # Appended to stdin-style problems. The benchmark statement alone does not say
 # how the program receives its input, so the task is not well-posed without it.
@@ -71,16 +83,17 @@ def _decode_tests(raw: str) -> list[dict]:
         return json.loads(pickle.loads(zlib.decompress(base64.b64decode(raw.encode()))))
 
 
-def download(force: bool = False) -> Path:
-    """Fetch test6.jsonl into the cache. ~134 MB, free, once."""
+def download(filename: str, force: bool = False) -> Path:
+    """Fetch one release file into the cache. Free, once each."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    dest = CACHE_DIR / FILENAME
+    dest = CACHE_DIR / filename
     if dest.exists() and not force:
         return dest
 
     tmp = dest.with_suffix(".part")
-    print(f"  downloading LiveCodeBench {RELEASE} (~134 MB, one time)...")
-    with urllib.request.urlopen(URL) as r, open(tmp, "wb") as f:
+    print(f"  downloading LiveCodeBench {filename} (hundreds of MB, one time)...")
+    with urllib.request.urlopen(URL_TEMPLATE.format(filename=filename)) as r, \
+            open(tmp, "wb") as f:
         while chunk := r.read(1 << 20):
             f.write(chunk)
     tmp.replace(dest)   # atomic, so an interrupted download is never mistaken
@@ -113,31 +126,34 @@ def get_livecodebench(force_download: bool = False) -> dict[str, dict]:
     if _CACHE and not force_download:
         return _CACHE
 
-    path = download(force=force_download)
     problems: dict[str, dict] = {}
+    lines = []
+    for filename in RELEASES:
+        path = download(filename, force=force_download)
+        with open(path) as f:
+            lines.extend(f.readlines())
 
-    with open(path) as f:
-        for line in f:
-            d = json.loads(line)
-            public = _decode_tests(d["public_test_cases"])
-            private = _decode_tests(d["private_test_cases"])
-            starter = (d.get("starter_code") or "").strip()
+    for line in lines:
+        d = json.loads(line)
+        public = _decode_tests(d["public_test_cases"])
+        private = _decode_tests(d["private_test_cases"])
+        starter = (d.get("starter_code") or "").strip()
 
-            problems[f"LiveCodeBench/{d['question_id']}"] = {
-                "task_id": f"LiveCodeBench/{d['question_id']}",
-                "prompt": build_prompt(d),
-                # Functional problems are graded by calling this method on a
-                # Solution class; stdin problems have no entry point at all.
-                "entry_point": _starter_method(starter) if starter else "",
-                "style": "functional" if starter else "stdin",
-                "starter_code": starter,
-                "base_input": public,      # the examples shown in the statement
-                "plus_input": private,     # the hidden ones. Same split as evalplus
-                "difficulty": d["difficulty"],
-                "platform": d["platform"],
-                "contest_date": d["contest_date"][:10],
-                "question_title": d["question_title"],
-            }
+        problems[f"LiveCodeBench/{d['question_id']}"] = {
+            "task_id": f"LiveCodeBench/{d['question_id']}",
+            "prompt": build_prompt(d),
+            # Functional problems are graded by calling this method on a
+            # Solution class; stdin problems have no entry point at all.
+            "entry_point": _starter_method(starter) if starter else "",
+            "style": "functional" if starter else "stdin",
+            "starter_code": starter,
+            "base_input": public,      # the examples shown in the statement
+            "plus_input": private,     # the hidden ones. Same split as evalplus
+            "difficulty": d["difficulty"],
+            "platform": d["platform"],
+            "contest_date": d["contest_date"][:10],
+            "question_title": d["question_title"],
+        }
 
     _CACHE.update(problems)
     return problems

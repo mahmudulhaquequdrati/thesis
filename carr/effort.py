@@ -40,8 +40,17 @@ class Config:
     held_out: bool = False
     subset_only: bool = False
     role: str = ""
-    # Position in the cheapest-first ordering. Assigned by load_configs so it
-    # is stable across runs; used as config_id when seeding the DB.
+    # STABLE identity, assigned from an alphabetical key. This is what goes in
+    # the database and what generations point at.
+    #
+    # It was previously the cheapest-first position, which was a bug: changing
+    # a price re-sorted the list, so config_id 4 meant deepseek-v4-pro one day
+    # and qwen3.6-35b-a3b the next. Eight already-bought rows ended up
+    # attributed to the wrong model. An identity must not depend on a value
+    # that is expected to move.
+    config_id: int = 0
+    # Position in the cheapest-first ordering. A BUDGET POLICY, not an
+    # identity: a cap abort should cost the expensive tail. Free to change.
     tier_index: int = 0
 
     @property
@@ -95,6 +104,12 @@ def load_configs(path: Path | str | None = None) -> list[Config]:
 
     # Deterministic: price, then slug, then effort. Fixed ordering matters
     # because config_id is assigned by position when the DB is seeded.
+    # Identity first, on a key that prices cannot move.
+    configs.sort(key=lambda c: (c.model_slug, c.effort_label))
+    for i, c in enumerate(configs):
+        c.config_id = i
+
+    # Then run order, which prices are expected to move.
     configs.sort(key=lambda c: (c.price_out_per_m, c.model_slug, c.effort_label))
     for i, c in enumerate(configs):
         c.tier_index = i

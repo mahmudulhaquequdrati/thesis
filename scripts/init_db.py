@@ -70,12 +70,18 @@ def main() -> None:
 
     configs = load_configs()
     for cfg in configs:
-        db.upsert_config(conn, cfg.tier_index, cfg)
+        db.upsert_config(conn, cfg.config_id, cfg)
     conn.commit()
     print(f"  configs   {len(configs):>5}   from config/models.yaml")
 
     # Idempotent: brings already-bought rows onto the current request_hash
     # formula so they are still recognised as bought and never re-purchased.
+    # Both idempotent. They bring an existing database onto the current
+    # request_hash formula and the current (stable) config_id scheme, so
+    # already-bought rows stay recognised and correctly attributed.
+    n_cfg, moved = db.repair_config_ids(conn)
+    if moved:
+        print(f"  repaired  {moved:>5}   generations re-pointed at the right config")
     changed = db.migrate_request_hashes(conn)
     if changed:
         print(f"  migrated  {changed:>5}   request_hash values (no re-purchase)")

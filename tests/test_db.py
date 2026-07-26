@@ -25,7 +25,7 @@ def conn(tmp_path):
 @pytest.fixture
 def seeded(conn):
     cfg = load_configs()[0]
-    db.upsert_config(conn, cfg.tier_index, cfg)
+    db.upsert_config(conn, cfg.config_id, cfg)
     db.upsert_problem(conn, problem_id="T/1", benchmark="humaneval_plus",
                       prompt="def f():\n", entry_point="f",
                       n_base_tests=3, n_plus_tests=7)
@@ -78,11 +78,11 @@ def test_duplicate_generation_returns_none(seeded):
     h = db.request_hash(cfg.model_slug, cfg.effort_label, "def f():\n",
                         cfg.params, "T/1")
 
-    first = db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
+    first = db.insert_generation(conn, problem_id="T/1", config_id=cfg.config_id,
                                  request_hash=h, is_mock=1)
     assert isinstance(first, int)
 
-    second = db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
+    second = db.insert_generation(conn, problem_id="T/1", config_id=cfg.config_id,
                                   request_hash=h, is_mock=1)
     assert second is None, "a duplicate request_hash must not insert a second row"
 
@@ -95,7 +95,7 @@ def test_has_generation_matches_insert(seeded):
     h = db.request_hash(cfg.model_slug, cfg.effort_label, "def f():\n",
                         cfg.params, "T/1")
     assert db.has_generation(conn, h) is False
-    db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
+    db.insert_generation(conn, problem_id="T/1", config_id=cfg.config_id,
                          request_hash=h, is_mock=1)
     assert db.has_generation(conn, h) is True
 
@@ -105,7 +105,7 @@ def test_other_integrity_errors_still_raise(seeded):
     conn, cfg = seeded
     with pytest.raises(Exception):
         db.insert_generation(conn, problem_id="NOPE/999",
-                             config_id=cfg.tier_index,
+                             config_id=cfg.config_id,
                              request_hash="h1", is_mock=1)
 
 
@@ -121,13 +121,42 @@ def test_configs_roundtrip(conn):
     """
     configs = load_configs()
     for cfg in configs:
-        db.upsert_config(conn, cfg.tier_index, cfg)
+        db.upsert_config(conn, cfg.config_id, cfg)
     conn.commit()
     assert len(db.list_configs(conn)) == len(configs)
 
     for cfg in configs:
-        db.upsert_config(conn, cfg.tier_index, cfg)
+        db.upsert_config(conn, cfg.config_id, cfg)
     assert len(db.list_configs(conn)) == len(configs)
+
+
+def test_config_id_does_not_depend_on_price():
+    """config_id is an IDENTITY and must survive a price change.
+
+    It used to be the position in a cheapest-first sort. Repricing
+    deepseek-v4-pro re-sorted the list, config_id 4 silently changed meaning,
+    and eight already-bought generations ended up attributed to the wrong
+    model. Identities may not be derived from values that move.
+    """
+    import copy
+
+    base = {c.model_slug + "|" + c.effort_label: c.config_id for c in load_configs()}
+
+    # Same roster, wildly different prices.
+    reversed_prices = load_configs()
+    for c in reversed_prices:
+        c.price_out_per_m = 100.0 - c.price_out_per_m
+    reordered = sorted(copy.deepcopy(reversed_prices),
+                       key=lambda c: (c.price_out_per_m, c.model_slug))
+    after = {c.model_slug + "|" + c.effort_label: c.config_id for c in reordered}
+    assert base == after, "config_id moved when prices changed"
+
+
+def test_tier_index_is_cheapest_first_and_may_move():
+    """tier_index is a budget policy, not an identity -- it SHOULD track price."""
+    configs = sorted(load_configs(), key=lambda c: c.tier_index)
+    prices = [c.price_out_per_m for c in configs]
+    assert prices == sorted(prices)
 
 
 def test_every_model_has_both_efforts():
@@ -147,7 +176,7 @@ def test_every_model_has_both_efforts():
 def test_error_type_domain_is_enforced(seeded):
     """grade() only emits 'assertion' and 'timeout'. The DB agrees."""
     conn, cfg = seeded
-    gen_id = db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
+    gen_id = db.insert_generation(conn, problem_id="T/1", config_id=cfg.config_id,
                                   request_hash="h", is_mock=1)
     with pytest.raises(Exception):
         conn.execute(
@@ -162,7 +191,7 @@ def test_result_mirrors_grade_result(seeded):
     conn, cfg = seeded
     from carr.execute.verify import GradeResult
 
-    gen_id = db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
+    gen_id = db.insert_generation(conn, problem_id="T/1", config_id=cfg.config_id,
                                   request_hash="h", is_mock=1)
     g = GradeResult(passed=False, base_passed=True, n_tests_passed=9,
                     n_tests_total=10, error_type="assertion")
@@ -189,7 +218,7 @@ def test_cheapest_passing_is_the_routing_target(seeded):
 
     configs = load_configs()
     for cfg in configs[:3]:
-        db.upsert_config(conn, cfg.tier_index, cfg)
+        db.upsert_config(conn, cfg.config_id, cfg)
 
     # Cheap config fails; two dearer ones pass. The target is the cheaper pass.
     for i, (cfg, passed, cost) in enumerate([
@@ -198,7 +227,7 @@ def test_cheapest_passing_is_the_routing_target(seeded):
         (configs[2], True, 0.0009),
     ]):
         gen_id = db.insert_generation(
-            conn, problem_id="T/1", config_id=cfg.tier_index,
+            conn, problem_id="T/1", config_id=cfg.config_id,
             request_hash=f"h{i}", cost_computed_usd=cost, is_mock=1)
         db.upsert_result(conn, gen_id,
                          GradeResult(passed, passed, 1, 1, None if passed else "assertion"))
@@ -213,7 +242,7 @@ def test_no_passing_config_means_no_label(seeded):
     conn, cfg = seeded
     from carr.execute.verify import GradeResult
 
-    gen_id = db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
+    gen_id = db.insert_generation(conn, problem_id="T/1", config_id=cfg.config_id,
                                   request_hash="h", cost_computed_usd=0.1, is_mock=1)
     db.upsert_result(conn, gen_id, GradeResult(False, False, 0, 1, "assertion"))
     assert db.cheapest_passing(conn, "T/1") is None
@@ -221,7 +250,7 @@ def test_no_passing_config_means_no_label(seeded):
 
 def test_mock_rows_are_excluded_from_real_spend(seeded):
     conn, cfg = seeded
-    db.insert_generation(conn, problem_id="T/1", config_id=cfg.tier_index,
+    db.insert_generation(conn, problem_id="T/1", config_id=cfg.config_id,
                          request_hash="mock", cost_computed_usd=99.0, is_mock=1)
     s = db.summary(conn)
     assert s["mock_generations"] == 1

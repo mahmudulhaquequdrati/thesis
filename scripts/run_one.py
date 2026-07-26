@@ -96,11 +96,11 @@ def main() -> None:
 
     configs = load_configs()
     for cfg in configs:
-        db.upsert_config(conn, cfg.tier_index, cfg)
+        db.upsert_config(conn, cfg.config_id, cfg)
     conn.commit()
 
     if not args.all:
-        configs = [c for c in configs if c.tier_index == args.config]
+        configs = [c for c in configs if c.config_id == args.config]
         if not configs:
             sys.exit(f"no config with id {args.config}")
 
@@ -173,7 +173,7 @@ def main() -> None:
 
         gen_id = db.insert_generation(
             conn,
-            problem_id=args.problem, config_id=cfg.tier_index,
+            problem_id=args.problem, config_id=cfg.config_id,
             request_hash=req_hash, openrouter_gen_id=gen.provider_gen_id,
             raw_response=gen.raw_response, extracted_code=code,
             prompt_tokens=gen.usage.prompt_tokens if gen.usage else None,

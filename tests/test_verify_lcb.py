@@ -82,13 +82,17 @@ def problems():
 
 
 def test_dataset_shape(problems):
-    assert len(problems) == 175
+    """Deliberately no hardcoded total -- more releases get loaded over time."""
+    assert len(problems) > 100
     assert {p["style"] for p in problems.values()} == {"stdin", "functional"}
     assert {p["difficulty"] for p in problems.values()} == {"easy", "medium", "hard"}
-    # The hard tier is the entire reason LCB is here -- HumanEval+ and MBPP+
-    # saturate, and RQ4 needs problems the cheap configs actually fail.
-    hard = sum(p["difficulty"] == "hard" for p in problems.values())
-    assert hard >= 50, f"only {hard} hard problems; the saturation fix needs more"
+    # The hard tier is the entire reason LCB is here. The pilot measured
+    # HumanEval+, MBPP+ and LCB-easy at 90-100% pass regardless of reasoning,
+    # so only medium and hard carry any signal at all.
+    usable = sum(p["difficulty"] in ("hard", "medium") for p in problems.values())
+    assert usable >= 150, (
+        f"only {usable} medium/hard problems; the abort threshold cannot be "
+        f"estimated on a sample that thin")
 
 
 def test_contamination_window_is_recorded(problems):

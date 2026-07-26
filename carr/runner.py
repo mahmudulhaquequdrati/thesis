@@ -142,7 +142,7 @@ def _store(conn, cell, gen, temperature: float) -> tuple[int | None, float]:
     )
     gen_id = db.insert_generation(
         conn,
-        problem_id=cell.problem_id, config_id=cell.config.tier_index,
+        problem_id=cell.problem_id, config_id=cell.config.config_id,
         request_hash=cell.request_hash, openrouter_gen_id=gen.provider_gen_id,
         raw_response=gen.raw_response,
         extracted_code=extract_code(gen.raw_response),
