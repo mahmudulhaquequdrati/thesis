@@ -72,6 +72,13 @@ sampling:
   # Fixed everywhere: sampling, splits, bootstrap. Reproducibility is graded.
   seed: 20260726
 
+  # Problems the held-out (subset_only) configs run on. RQ5 asks whether the
+  # findings transfer to an unseen model, which does not need full coverage --
+  # and at $3.40/M output, full coverage of kimi would cost more than every
+  # other config combined. THESIS.md section 9 has always said this; until now
+  # nothing enforced it and the runner was quietly planning the full grid.
+  held_out_subset: 100
+
   # The pilot's job is NOT to produce results. It is to measure two numbers
   # that the whole budget depends on and that no amount of estimating can
   # supply: mean thinking tokens on HARD problems, and the saturation rate.
@@ -87,11 +94,24 @@ sampling:
       livecodebench_medium: 3
       livecodebench_hard: 4
 
-  # The full grid. Final size is set BY the pilot, not before it.
+  # The full grid, RE-WEIGHTED BY THE PILOT (2026-07-26).
+  #
+  # The pilot measured HumanEval+ at 90-100% pass, MBPP+ at 93-100% and
+  # LCB-easy at 100% -- regardless of whether reasoning was on. Those tiers
+  # cannot distinguish one config from another, so spending grid budget on
+  # them buys rows that inform nothing.
+  #
+  # Weight moved to LCB medium and hard, which are the only tiers that
+  # discriminated (60/50% and 50/31%). Loading LCB v5 alongside v6 made this
+  # possible: 154 hard and 104 medium are available, against 80 and 52 before.
+  #
+  # The easy tiers are kept at a small anchor rather than dropped, because the
+  # saturation rate is itself a reported finding and needs a measured
+  # denominator -- not because they help the router.
   grid:
     strata:
-      humaneval_plus: 60
-      mbpp_plus: 90
-      livecodebench_easy: 30
-      livecodebench_medium: 50
-      livecodebench_hard: 70
+      humaneval_plus: 20        # anchor: measures saturation, not routing
+      mbpp_plus: 20             # anchor
+      livecodebench_easy: 20    # anchor
+      livecodebench_medium: 104   # all of them
+      livecodebench_hard: 154     # all of them

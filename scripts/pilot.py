@@ -69,7 +69,12 @@ def main() -> None:
 
     strata = exp.pilot_strata if args.set == "pilot" else exp.grid_strata
     problem_ids = sample_problems(conn, strata, exp.seed)
-    cells, skipped = runner.plan(conn, problem_ids, configs)
+    # The pilot deliberately runs every config on every sampled problem -- it is
+    # measuring, not building the dataset. The grid honours the held-out subset.
+    cells, skipped = runner.plan(
+        conn, problem_ids, configs,
+        subset_size=None if args.set == "pilot" else exp.held_out_subset,
+        seed=exp.seed)
 
     already = runner.lifetime_spend(conn)
     max_tokens = exp.generation.max_tokens

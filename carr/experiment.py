@@ -52,6 +52,7 @@ class Experiment:
     generation: GenerationSettings
     seed: int
     strata: dict[str, dict[str, int]]
+    held_out_subset: int = 100
 
     @property
     def pilot_strata(self) -> dict[str, int]:
@@ -70,6 +71,7 @@ def load_experiment(path: Path | str | None = None) -> Experiment:
         generation=GenerationSettings(**raw["generation"]),
         seed=s["seed"],
         strata={"pilot": s["pilot"]["strata"], "grid": s["grid"]["strata"]},
+        held_out_subset=int(s.get("held_out_subset", 100)),
     )
 
 

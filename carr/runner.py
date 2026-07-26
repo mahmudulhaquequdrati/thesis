@@ -95,13 +95,37 @@ class RunReport:
     generation_ids: list[str] = field(default_factory=list)
 
 
-def plan(conn, problem_ids: list[str], configs: list) -> tuple[list[Cell], int]:
+def held_out_subset(problem_ids: list[str], size: int, seed: int) -> set[str]:
+    """The problems a `subset_only` config runs on. Deterministic.
+
+    Sorted before sampling and seeded on the size, so the subset depends only
+    on (seed, size, pool) -- not on the order problems arrive in. Growing the
+    grid must not reshuffle which problems the held-out model already ran.
+    """
+    import random
+
+    pool = sorted(problem_ids)
+    if size >= len(pool):
+        return set(pool)
+    return set(random.Random(f"{seed}:held_out:{size}").sample(pool, size))
+
+
+def plan(conn, problem_ids: list[str], configs: list, *,
+         subset_size: int | None = None, seed: int = 0) -> tuple[list[Cell], int]:
     """Build the work list, cheapest expected first, skipping bought cells.
+
+    Configs marked `subset_only` run on a subset of problems rather than all of
+    them -- that is the RQ5 held-out design, and at $3.40/M output running kimi
+    over the full grid would cost more than every other config combined.
+    Passing subset_size=None runs everything everywhere, which is what the
+    pilot wants.
 
     Returns (cells_to_run, already_bought_count).
     """
     cells: list[Cell] = []
     skipped = 0
+    subset = (held_out_subset(problem_ids, subset_size, seed)
+              if subset_size is not None else None)
 
     for problem_id in problem_ids:
         problem = db.get_problem(conn, problem_id)
@@ -111,6 +135,8 @@ def plan(conn, problem_ids: list[str], configs: list) -> tuple[list[Cell], int]:
         prompt_tokens = max(1, len(prompt) // 4)   # chars/4, as in data-spec
 
         for cfg in configs:
+            if subset is not None and cfg.subset_only and problem_id not in subset:
+                continue
             h = db.request_hash(cfg.model_slug, cfg.effort_label, prompt,
                                 cfg.params, problem_id)
             if db.has_generation(conn, h):
