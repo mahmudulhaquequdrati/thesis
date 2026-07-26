@@ -13,7 +13,7 @@ Total spent so far: **$0.58**. Remaining: $14.42.
 
 ## 1. What is built and working
 
-A complete measurement harness, tested (60 tests):
+A complete measurement harness, tested (77 tests):
 
 * 884 problems loaded — HumanEval+ (164), MBPP+ (378), LiveCodeBench (342: 154 hard, 104 medium, 84 easy)
 * 10 configurations — 5 open-weight models × reasoning off/on, via OpenRouter
@@ -55,8 +55,8 @@ These are measurement results that hold regardless of framing.
 LCB easy → medium → hard.
 
 **(b) Reasoning length predicts failure.** Calls that *pass* average **2,333**
-reasoning tokens. Calls that return **nothing** average **11,878**. All 12
-truncated calls produced zero usable code while being billed in full —
+reasoning tokens. Calls that return **nothing** average **11,878**. All 11
+billed non-answers produced zero usable code while being charged in full —
 **17% of total spend bought nothing**.
 
 **(c) The platform advertises controls it does not enforce.** Two instances:
@@ -96,7 +96,8 @@ models to think less, so runtime monitoring is not a redundant mechanism.
 ## 5. Honest limitations
 
 * **Sample size: 15 problems, 59 thinking calls.** Everything above is
-  direction, not estimate. The grid (~$2–4) fixes this.
+  direction, not estimate. The full grid — 318 problems, 2,744 cells, priced
+  at **$4.59** — fixes this and fits the remaining budget.
 * **The 10,000-token threshold held because nothing above it succeeded here.**
   That is exactly the kind of result that regresses with more data, and it is
   the main scientific risk.
@@ -119,5 +120,10 @@ models to think less, so runtime monitoring is not a redundant mechanism.
    published open-weight evaluations that route through an aggregator without
    pinning are comparing different quantizations at different prices. Worth a
    section, or a footnote?
-4. Should I spend the remaining budget widening the problem set (more
-   LiveCodeBench hard, free to download) before running the full grid?
+4. Should I spend the remaining budget widening the problem set further (more
+   LiveCodeBench releases are free to download) before running the full grid?
+
+---
+
+*Reproduce any number above with `uv run python scripts/results.py` (free,
+read-only). The harness, data and this document are version-controlled.*
