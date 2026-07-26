@@ -13,13 +13,15 @@
 
 | | |
 |---|---|
-| **Stage** | **Week 1 COMPLETE.** Days 1–5 ✅. Real generations flowing end to end: problem → OpenRouter → extract → grade → row. |
+| **Stage** | **Week 1 ✅. PILOT RUN — and it changed the experiment design.** See the findings block in §11. |
+| ~~Stage~~ | **Week 1 COMPLETE.** Days 1–5 ✅. Real generations flowing end to end: problem → OpenRouter → extract → grade → row. |
 | **Next action** | **Run the pilot — needs your go-ahead.** `uv run python scripts/pilot.py --dry-run` prices it free: **expected $0.29**, this run capped at **$0.37** (1.25× the estimate). It measures the two numbers that size the grid: thinking tokens on *hard* problems, and the saturation rate. In parallel: [docs/advisor-repositioning.md](docs/advisor-repositioning.md) to your advisor |
-| **Spend to date** | **$0.0114** of **$15.00 loaded** ($50 ceiling; runner aborts at **$6.00**, so $9 stays unspendable) |
-| **Rows in dataset** | **10 real of ~2,600** (~300 problems × 10 configs — final count set by the pilot). Problem pool: **717 loaded** (HumanEval+ 164, MBPP+ 378, LiveCodeBench 175) + 10 configs |
+| **Spend to date** | **$0.578** of **$15.00 loaded** ($14.42 left; runner aborts at $6.00) |
+| **Rows in dataset** | **149 real** (135 graded), 11 pilot cells unbought when the cap fired. Of ~2,600 (~300 problems × 10 configs — final count set by the pilot). Problem pool: **717 loaded** (HumanEval+ 164, MBPP+ 378, LiveCodeBench 175) + 10 configs |
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
+- `2026-07-26` — **PILOT RUN ($0.578 total). It found what it was built to find, and the answer changes the design.** 149 generations, 135 graded, 15 stratified problems × 10 configs. **(1) Saturation confirmed and quantified:** HumanEval+ 90–100%, MBPP+ 93–100%, LCB-easy 100% — no routing signal at all. Only **LCB medium (50–60%) and hard (31–50%) discriminate**, and the pool holds just 132 of those. **(2) Routing collapse:** 13 of 16 problems (81%) have the *same* cheapest-passing config, `deepseek-v4-flash | off`. That is the "When Routing Collapses" phenomenon §15.3 cites, in our own data. **(3) ⚠️ The effort axis is confounded by `max_tokens`:** on LCB hard, **7 of 16 thinking calls hit the 16,000-token ceiling and returned nothing**. Thinking scores *worse* than not-thinking there (31% vs 50%) — but that is truncation, not capability. **(4) The cost trap, measured:** $0.099 — **17% of all pilot spend** — bought calls that returned nothing usable, almost all thinking configs on hard problems; `deepseek-v4-pro|high` alone wasted $0.064 across 4 calls averaging 10,754 reasoning tokens.
 - `2026-07-26` — **Searched for harder/newer problems before spending. Two findings, one of them important.** (1) **There is no public code-generation benchmark shipping 2026 problems with test cases.** The frontier is LiveCodeBench-Pro at 2025 Q3 (gated, needs an HF login); LCB proper stopped at 2025-04. Genuinely post-cutoff problems would mean scraping AtCoder/Codeforces and building a benchmark — months, not a step. So contamination stays a reported limitation rather than something we can engineer away. (2) ⚠️ **Found the closest prior art yet: [Agent-as-a-Router / CodeRouterBench](https://arxiv.org/abs/2606.22902) (Jun 2026)** — routing for coding tasks, 8 backends, 9,999 tasks × 8 models released free. Checked against the data: it has **no effort axis and no reasoning-token column**, and its router is trained (LoRA). It sharpens our claim rather than displacing it, but it must be cited (§15.3) — and its 79,992-row matrix is the best free target yet for prototyping `router/knn.py` at $0 (§15.2).
 - `2026-07-26` — **Balance raised $4.00 → $15.00; the spending rule tightened rather than loosened.** A bigger balance is not a bigger budget. `abort_at_usd` is **$6.00**, so **$9 of the balance is unspendable** whatever a bug does, and a new per-run ceiling (`run_headroom: 1.25`) keeps any single run within 1.25× *its own* estimate even when the lifetime cap has room — the "if it can be done for $2, never spend $2.20+" rule made mechanical. An early stop costs a re-invocation, not money, because bought cells are skipped for free.
 - `2026-07-26` — **Runner, cost cap and pilot built. $0 spent.** `config/experiment.yaml` (the caps finally have a home), `carr/experiment.py` (stratified sampling, fixed seed), `carr/runner.py` (the paid loop) and `scripts/pilot.py`. **The cap aborts before spending, on worst case, against lifetime DB spend** — 16 tests in `tests/test_runner.py` prove it, including that a zero-headroom cap buys literally nothing and that a mid-run stop is resumable. Pilot priced at **expected $0.29 / worst case $2.37** over 15 stratified problems × 10 configs. ⚠️ **Latent bug found and fixed: `request_hash` did not include `problem_id`,** so two problems sharing a prompt would collide and the second would silently get no row, no result and no routing label. Zero collisions in the current 717-problem pool, so it was invisible rather than harmful — now closed, with the 10 existing rows migrated in place rather than re-bought.
@@ -498,7 +500,35 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 
 **Action:** check the pass-rate spread during the Week-2 pilot. If the cheapest config solves 9 of 10 HumanEval+ problems, rebalance the sample immediately.
 
-> ### ⚠️ 2026-07-26 — this is no longer hypothetical
+> ### 🔴 2026-07-26 (evening) — MEASURED IN THE PILOT
+>
+> | tier | reasoning off | reasoning high | verdict |
+> |---|---|---|---|
+> | HumanEval+ | 90% | 100% | **saturated — no signal** |
+> | MBPP+ | 93% | 100% | **saturated — no signal** |
+> | LCB easy | 100% | 100% | **saturated — no signal** |
+> | LCB medium | 60% | 50% | discriminates |
+> | LCB hard | **50%** | **31%** | discriminates |
+>
+> **76% of the 717-problem pool produces no routing signal whatsoever.** The
+> usable set is the 132 LCB medium+hard problems, and we sampled only 7.
+>
+> **Routing collapse is already visible:** 13 of 16 problems (81%) share the
+> same cheapest-passing config, `deepseek-v4-flash | off`. A router that always
+> answers "flash, no thinking" would score 81% on this sample. That is the
+> degenerate result §15.3's *When Routing Collapses* names.
+>
+> **Three consequences for the grid design:**
+> 1. **Drop or heavily downweight the easy benchmarks.** Spending the grid
+>    budget on HumanEval+/MBPP+ buys rows that cannot inform routing.
+> 2. **More hard problems are now required, not optional.** 132 is too thin for
+>    k-NN plus bootstrap CIs. LiveCodeBench's earlier releases (v1–v5) add ~880
+>    more, free — see §9.
+> 3. **Report the saturation rate as a finding.** "Reasoning is unnecessary on
+>    N% of standard benchmark problems" is a real result, and we now have the
+>    number.
+>
+> ### ⚠️ 2026-07-26 (earlier) — this is no longer hypothetical
 >
 > The **first real cell** of the grid, `HumanEval/0` × all 10 configs, came back
 > **10/10 PASS**. Every no-reasoning config solved it, including the cheapest
@@ -529,6 +559,7 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 | Budget overrun | **$50 hard cap** in `experiment.yaml` that *aborts* the run (not warns); `max_tokens` ceiling per config so no single trace runs away; cheapest configs first, so a blowout costs the expensive tail not the cheap foundation; `request_hash` prevents ever paying twice |
 | Model deprecation mid-project | Roster in YAML, verified Week 1, snapshot dates recorded |
 | **⚠️ LiveCodeBench contamination is uncontrolled** | LCB stopped updating (newest problem 2025-04-06); every roster model is a 2026 release, so there is no post-cutoff window. **Mitigation is honesty, not filtering:** `problems.release_date` stores every contest date, the limitation is reported explicitly, and LCB is positioned as a *difficulty* tier rather than a contamination control. A suspiciously high pass rate on LCB hard problems should be read as possible memorisation |
+| **🔴 `max_tokens` confounds the effort axis** | On LCB hard, **7 of 16 thinking calls hit the 16,000-token ceiling and returned no answer**; on LCB medium, 4 of 12. Reasoning-high therefore scores *below* reasoning-off on hard problems (31% vs 50%), which measures truncation rather than capability. Two honest options, and the choice must be explicit: raise the ceiling (costs more, measures capability) or keep it and report "fails to terminate within budget" as a genuine property of the config (defensible — real deployments have budgets). **Currently unresolved; it must be settled before the grid.** |
 | **The LCB grader has no reference implementations to check itself against** | evalplus ships canonical solutions; LCB ships none, so `test_canonical_solutions_pass` has no LCB equivalent. Replaced by hand-written reference solutions in `tests/test_verify_lcb.py`, covering both execution styles. Without them an LCB harness bug would read as "all models fail hard problems" |
 | Effort control differs across models | `effort_mechanism` logged as a variable; report split by mechanism |
 | CARR shows no gain | RQ1–RQ3 stand alone (proposal §8 already says this). The gap decomposition turns a null result into a diagnostic one |
