@@ -34,10 +34,19 @@ generation:
   # Per-call ceiling on completion tokens. This is a cost control, not a
   # quality setting: a truncated answer is a legitimate failure that cost a
   # known, bounded amount. It is also what the worst-case cap is computed from.
-  max_tokens: 16000
+  # Raised 16000 -> 32000 on 2026-07-26. At 16k, 12 of 12 truncated calls
+  # produced ZERO usable code while being billed in full, and thinking configs
+  # scored BELOW no-thinking on hard problems -- which measured the ceiling,
+  # not the model. The abort threshold, not max_tokens, is the cost control now.
+  max_tokens: 32000
   # A failed call is recorded and skipped, not retried in place -- a retry loop
   # is how a cost cap gets defeated. Re-running the script picks it up instead.
   retries: 0
+  # Rate limits are the one exception, and only because they cost nothing.
+  # allow_fallbacks is off, so an overloaded pinned provider returns 429 and
+  # the cell is simply lost. A 429 is billed $0, so retrying it cannot defeat
+  # the cost cap -- unlike retrying a call that already produced tokens.
+  rate_limit_retries: 3
   # Parallel API calls. Safe with the cost cap because dispatch happens in
   # waves: a wave is only sent if its whole worst case fits the headroom.
   concurrency: 12
@@ -45,6 +54,19 @@ generation:
   # runs 43 tests twice, which is what made the serial pilot take a minute a
   # cell -- almost all of it waiting on grading rather than on the API.
   grade_concurrency: 6
+
+# Runtime abort on reasoning length -- the thesis's intervention.
+#
+# Verified 2026-07-26 on two providers: `delta.reasoning` is observable live in
+# the stream, aborting mid-reasoning is billed $0.00, and the same cell run to
+# completion cost $0.010978. So this saves the WHOLE call, not a pro-rata part.
+#
+# Simulated over the pilot's thinking calls: aborting at 10,000 reasoning
+# tokens kept 42/42 passes and cut spend 44%; at 6,000, 78% saved for 10%
+# fewer solved. null disables it -- the grid must run unaborted first, or the
+# threshold would be fitted on the data it is evaluated against.
+abort:
+  reasoning_tokens: null
 
 sampling:
   # Fixed everywhere: sampling, splits, bootstrap. Reproducibility is graded.

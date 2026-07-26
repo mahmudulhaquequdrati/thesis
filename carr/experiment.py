@@ -43,6 +43,7 @@ class GenerationSettings:
     retries: int
     concurrency: int = 1
     grade_concurrency: int = 4
+    rate_limit_retries: int = 3
 
 
 @dataclass

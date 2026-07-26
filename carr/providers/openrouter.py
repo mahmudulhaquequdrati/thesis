@@ -39,7 +39,7 @@ BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-call ceiling on completion tokens (docs/data-spec.md section 2). One
 # runaway reasoning trace can cost more than a hundred normal calls.
-DEFAULT_MAX_TOKENS = 16000
+DEFAULT_MAX_TOKENS = 32000
 
 
 class OpenRouterProvider:
@@ -88,9 +88,23 @@ class OpenRouterProvider:
 
     def complete(self, prompt: str, config, *, problem_id: str,
                  max_tokens: int = DEFAULT_MAX_TOKENS,
-                 temperature: float = 0.0) -> Generation:
+                 temperature: float = 0.0,
+                 rate_limit_retries: int = 3) -> Generation:
         """One paid API call. `problem_id` is unused here; see base.Provider."""
         started = time.perf_counter()
+        for attempt in range(max(1, rate_limit_retries + 1)):
+            gen = self._once(prompt, config, max_tokens, temperature, started)
+            # Retry ONLY rate limits, and only because they are billed $0 --
+            # retrying anything that produced tokens would defeat the cost cap.
+            # With allow_fallbacks off, an overloaded pinned provider 429s and
+            # the cell is otherwise lost.
+            if gen.error and "RateLimitError" in gen.error and attempt < rate_limit_retries:
+                time.sleep(2 ** attempt)
+                continue
+            return gen
+        return gen
+
+    def _once(self, prompt, config, max_tokens, temperature, started) -> Generation:
         try:
             resp = self._client.chat.completions.create(
                 model=config.model_slug,
