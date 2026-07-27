@@ -410,3 +410,57 @@ def test_common_problems_requires_every_named_config(conn):
     add(conn, "P/both", HIGH, think=500, cost=0.01, passed=True)
     add(conn, "P/one", OFF, think=0, cost=0.001, passed=True)
     assert analysis.common_problems(conn, [OFF, HIGH]) == ["P/both"]
+
+
+# ------------------------------------------------------------------ figures
+
+
+def test_figures_render_from_a_real_database(conn, tmp_path):
+    """A figure that crashes at write-up time is worse than no figure.
+
+    Renders against a small but structurally real database -- both effort arms,
+    several tiers, passes and billed non-answers -- and checks files appear.
+    """
+    from carr import figures
+
+    for i in range(12):
+        tier = "hard" if i % 2 else "medium"
+        add(conn, f"P/{i}", OFF, think=0, cost=0.001, passed=(i % 3 == 0),
+            difficulty=tier)
+        add(conn, f"P/{i}", HIGH, think=2000 + 900 * i, cost=0.01,
+            passed=(i % 2 == 0), difficulty=tier)
+    add(conn, "P/burn", HIGH, think=30000, cost=0.05, passed=False,
+        difficulty="hard", finish="length", error="empty response", graded=False)
+    add(conn, "P/burn", OFF, think=0, cost=0.001, passed=False, difficulty="hard")
+
+    original = figures.FIGURE_DIR
+    figures.FIGURE_DIR = tmp_path / "figures"
+    try:
+        made = figures.make_all(conn, seed=1)
+    finally:
+        figures.FIGURE_DIR = original
+
+    assert made, "no figures were produced at all"
+    for path in made:
+        assert path.exists() and path.stat().st_size > 1000, f"{path} looks empty"
+
+
+def test_one_bad_figure_does_not_lose_the_others(conn, tmp_path):
+    """make_all must be resilient: a missing panel is obvious, a crash is not.
+
+    With only no-reasoning data there is no frontier and no abort curve, but the
+    tier chart is still perfectly renderable.
+    """
+    from carr import figures
+
+    for i in range(6):
+        add(conn, f"P/{i}", OFF, think=0, cost=0.001, passed=(i % 2 == 0),
+            difficulty="hard")
+
+    original = figures.FIGURE_DIR
+    figures.FIGURE_DIR = tmp_path / "figures"
+    try:
+        made = figures.make_all(conn, seed=1)
+    finally:
+        figures.FIGURE_DIR = original
+    assert len(made) >= 1, "every figure failed when one should have survived"
