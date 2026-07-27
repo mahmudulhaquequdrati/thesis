@@ -472,3 +472,204 @@ def abort_curve_ci(conn, thresholds=(2000, 4000, 6000, 8000, 10000, 12000, 16000
             "n_problems": len(problems),
         })
     return out
+
+
+# ------------------------------------------------- the frontier and its hull
+#
+# THESIS.md section 10.1, which is the honest bar for RQ4:
+#
+#   Each config is a point (cost c_i, accuracy a_i). If you may randomize --
+#   send fraction p_i of problems to config i -- the achievable set is the
+#   CONVEX HULL of those points. [...] "CARR beats the best single model" is
+#   nearly free and proves little. The honest bar: CARR must beat the convex
+#   hull -- and it can, because the hull is blind to the problem while CARR
+#   reads its features.
+#
+# No scipy. A 2D upper hull is a monotone chain in twenty lines, and adding a
+# heavyweight dependency for that would be silly.
+#
+# Every function here takes ONE problem set shared by every config being
+# compared. Comparing configs measured on different problems is not a frontier
+# however it is drawn -- see common_problems().
+
+
+def common_problems(conn, config_ids: list[int]) -> list[str]:
+    """Problems where every one of `config_ids` has a graded, billed result."""
+    if not config_ids:
+        return []
+    marks = ",".join("?" * len(config_ids))
+    rows = conn.execute(f"""
+        SELECT g.problem_id FROM generations g
+        JOIN results r ON r.gen_id = g.gen_id
+        WHERE {_REAL} AND NOT {_INFRA} AND g.config_id IN ({marks})
+        GROUP BY g.problem_id
+        HAVING COUNT(DISTINCT g.config_id) = ?
+        ORDER BY g.problem_id
+    """, [*config_ids, len(config_ids)]).fetchall()
+    return [r[0] for r in rows]
+
+
+def frontier_subset(conn, min_problems: int = 50) -> tuple[list[int], list[str]]:
+    """Pick the largest config set that still shares `min_problems` problems.
+
+    The grid is unbalanced, so this is a genuine trade: all ten configs share
+    only 5 problems, which is useless, while six share 60, which is a frontier.
+    Configs are added widest-coverage-first and the set stops growing when the
+    intersection would fall below the floor.
+
+    Returns (config_ids, problem_ids) so a caller can report both.
+    """
+    coverage = {}
+    for r in conn.execute(f"""
+            SELECT g.config_id, COUNT(DISTINCT g.problem_id) AS n
+            FROM generations g JOIN results r ON r.gen_id = g.gen_id
+            WHERE {_REAL} AND NOT {_INFRA} GROUP BY g.config_id"""):
+        coverage[r["config_id"]] = r["n"]
+
+    chosen: list[int] = []
+    problems: list[str] = []
+    for config_id in sorted(coverage, key=lambda c: -coverage[c]):
+        candidate = [*chosen, config_id]
+        shared = common_problems(conn, candidate)
+        if len(shared) < min_problems and chosen:
+            continue                     # this config would cost too much overlap
+        chosen, problems = candidate, shared
+    return chosen, problems
+
+
+def frontier(conn, config_ids: list[int] | None = None,
+             problem_ids: list[str] | None = None, *,
+             seed: int = 0, n_resamples: int = 1500) -> list[dict]:
+    """One (mean cost, accuracy) point per config over ONE shared problem set.
+
+    Cost is mean dollars per problem, not per solved problem -- the frontier is
+    "what does a fixed strategy buy", so the denominator has to be every problem
+    it was asked, including the ones it failed.
+    """
+    if config_ids is None:
+        config_ids, problem_ids = frontier_subset(conn)
+    if problem_ids is None:
+        problem_ids = common_problems(conn, config_ids)
+
+    by_config = _per_problem_config(conn, problem_ids)
+    names = _config_names(conn)
+    points = []
+    for config_id in config_ids:
+        rows = [r for r in by_config.get(config_id, [])
+                if r["problem_id"] in set(problem_ids)]
+        if not rows:
+            continue
+        slug, effort = names.get(config_id, ("?", "?"))
+        acc_lo, acc_hi = bootstrap_ci(
+            rows, proportion(lambda r: r["solved"] == 1),
+            seed=seed, n_resamples=n_resamples)
+        points.append({
+            "config_id": config_id, "model_slug": slug, "effort_label": effort,
+            "n": len(rows),
+            "cost": sum(r["cost"] for r in rows) / len(rows),
+            "accuracy": 100.0 * sum(r["solved"] for r in rows) / len(rows),
+            "acc_lo": acc_lo, "acc_hi": acc_hi,
+        })
+    points.sort(key=lambda p: p["cost"])
+    return points
+
+
+def pareto_front(points: list[dict]) -> list[dict]:
+    """Points no other point beats on BOTH cost and accuracy.
+
+    Everything else is dominated -- strictly worse on both axes, so no rational
+    strategy would ever pick it (THESIS.md section 13).
+    """
+    out = []
+    for p in points:
+        if not any(q["cost"] <= p["cost"] and q["accuracy"] >= p["accuracy"]
+                   and (q["cost"] < p["cost"] or q["accuracy"] > p["accuracy"])
+                   for q in points):
+            out.append(p)
+    return sorted(out, key=lambda p: p["cost"])
+
+
+def upper_hull(points: list[dict]) -> list[dict]:
+    """Upper convex hull of (cost, accuracy) -- the randomised-strategy bound.
+
+    Monotone chain. A point strictly inside the hull is beaten by MIXING two
+    hull vertices, so the hull, not the best single config, is what a
+    problem-blind strategy can actually achieve.
+    """
+    pts = sorted(points, key=lambda p: (p["cost"], p["accuracy"]))
+    if len(pts) < 3:
+        return pts
+
+    def cross(o, a, b) -> float:
+        return ((a["cost"] - o["cost"]) * (b["accuracy"] - o["accuracy"])
+                - (a["accuracy"] - o["accuracy"]) * (b["cost"] - o["cost"]))
+
+    hull: list[dict] = []
+    for p in pts:
+        # Pop while the last turn is not clockwise: those points sit below the
+        # line between their neighbours, so a mixture dominates them.
+        while len(hull) >= 2 and cross(hull[-2], hull[-1], p) >= 0:
+            hull.pop()
+        hull.append(p)
+    return hull
+
+
+def hull_accuracy_at(hull: list[dict], budget: float) -> float | None:
+    """Best accuracy a problem-BLIND randomised strategy reaches at `budget`.
+
+    Section 10.1's proposition: the optimum randomises between at most two
+    configurations, so it is a linear interpolation between adjacent hull
+    vertices. Below the cheapest config nothing is affordable; above the
+    dearest, the dearest is the ceiling.
+    """
+    if not hull:
+        return None
+    if budget < hull[0]["cost"]:
+        return None
+    if budget >= hull[-1]["cost"]:
+        return hull[-1]["accuracy"]
+    for a, b in zip(hull, hull[1:]):
+        if a["cost"] <= budget <= b["cost"]:
+            span = b["cost"] - a["cost"]
+            if span <= 0:
+                return max(a["accuracy"], b["accuracy"])
+            w = (budget - a["cost"]) / span
+            return a["accuracy"] * (1 - w) + b["accuracy"] * w
+    return hull[-1]["accuracy"]
+
+
+def oracle(conn, config_ids: list[int], problem_ids: list[str]) -> dict:
+    """The cheat that always picks the cheapest config that solves each problem.
+
+    This is the MCKP integer optimum of section 10.2, not an ad-hoc ceiling. It
+    is not achievable -- it needs the answer in advance -- but the gap between
+    it and the hull is exactly the value of problem-level information, which is
+    the sharp version of RQ4.
+    """
+    by_config = _per_problem_config(conn, problem_ids)
+    wanted = set(problem_ids)
+    per_problem: dict[str, list[tuple[float, int]]] = {}
+    for config_id in config_ids:
+        for r in by_config.get(config_id, []):
+            if r["problem_id"] in wanted:
+                per_problem.setdefault(r["problem_id"], []).append(
+                    (r["cost"], r["solved"]))
+
+    total_cost = 0.0
+    solved = 0
+    for _, cells in per_problem.items():
+        winners = [c for c, ok in cells if ok]
+        if winners:
+            total_cost += min(winners)      # cheapest config that solved it
+            solved += 1
+        else:
+            # Nothing solved it. The oracle still pays the cheapest attempt --
+            # pretending it pays nothing would flatter it for free.
+            total_cost += min(c for c, _ in cells)
+    n = len(per_problem)
+    return {
+        "n": n,
+        "solved": solved,
+        "accuracy": 100.0 * solved / n if n else 0.0,
+        "cost": total_cost / n if n else 0.0,
+    }

@@ -333,3 +333,80 @@ def test_abort_curve_ci_intervals_are_ordered(conn):
         if not (c["kept_lo"] != c["kept_lo"]):        # skip NaN
             assert c["kept_lo"] <= c["kept_hi"]
             assert c["saved_lo"] <= c["saved_hi"]
+
+
+# ------------------------------------------------- frontier geometry (RQ4)
+
+
+def test_pareto_drops_dominated_points():
+    """A point beaten on BOTH axes is never worth choosing."""
+    pts = [
+        {"config_id": 1, "cost": 1.0, "accuracy": 50.0},
+        {"config_id": 2, "cost": 2.0, "accuracy": 90.0},
+        {"config_id": 3, "cost": 3.0, "accuracy": 60.0},   # dominated by 2
+    ]
+    kept = {p["config_id"] for p in analysis.pareto_front(pts)}
+    assert kept == {1, 2}
+
+
+def test_hull_drops_points_a_mixture_beats():
+    """The middle point here is below the line from 1 to 3, so mixing beats it.
+
+    This is section 10.1's whole argument: a config can be Pareto-optimal and
+    still be worthless, because randomising between its neighbours dominates it.
+    """
+    pts = [
+        {"config_id": 1, "cost": 0.0, "accuracy": 0.0},
+        {"config_id": 2, "cost": 1.0, "accuracy": 40.0},   # under the chord
+        {"config_id": 3, "cost": 2.0, "accuracy": 100.0},
+    ]
+    assert {p["config_id"] for p in analysis.pareto_front(pts)} == {1, 2, 3}
+    assert {p["config_id"] for p in analysis.upper_hull(pts)} == {1, 3}
+
+
+def test_hull_keeps_a_point_above_the_chord(conn):
+    pts = [
+        {"config_id": 1, "cost": 0.0, "accuracy": 0.0},
+        {"config_id": 2, "cost": 1.0, "accuracy": 80.0},   # above the chord
+        {"config_id": 3, "cost": 2.0, "accuracy": 100.0},
+    ]
+    assert {p["config_id"] for p in analysis.upper_hull(pts)} == {1, 2, 3}
+
+
+def test_hull_accuracy_interpolates_between_vertices():
+    """Section 10.1: the optimum mixes at most TWO configs, so it is linear."""
+    hull = [{"cost": 0.0, "accuracy": 0.0}, {"cost": 2.0, "accuracy": 100.0}]
+    assert analysis.hull_accuracy_at(hull, 1.0) == pytest.approx(50.0)
+    assert analysis.hull_accuracy_at(hull, 2.0) == pytest.approx(100.0)
+    assert analysis.hull_accuracy_at(hull, 5.0) == pytest.approx(100.0)
+    assert analysis.hull_accuracy_at(hull, -1.0) is None, "nothing is affordable"
+
+
+def test_oracle_picks_the_cheapest_config_that_solved_each_problem(conn):
+    """The MCKP integer optimum, not an ad-hoc ceiling."""
+    add(conn, "P/1", OFF, think=0, cost=0.001, passed=False)
+    add(conn, "P/1", HIGH, think=500, cost=0.010, passed=True)   # only winner
+    add(conn, "P/2", OFF, think=0, cost=0.002, passed=True)      # cheap winner
+    add(conn, "P/2", HIGH, think=500, cost=0.020, passed=True)
+
+    o = analysis.oracle(conn, [OFF, HIGH], ["P/1", "P/2"])
+    assert o["solved"] == 2
+    assert o["accuracy"] == pytest.approx(100.0)
+    # 0.010 (only option for P/1) + 0.002 (cheapest winner for P/2), over 2
+    assert o["cost"] == pytest.approx((0.010 + 0.002) / 2)
+
+
+def test_oracle_still_pays_for_problems_nobody_solved(conn):
+    """Pretending an unsolved problem is free would flatter the oracle."""
+    add(conn, "P/x", OFF, think=0, cost=0.003, passed=False)
+    add(conn, "P/x", HIGH, think=500, cost=0.030, passed=False)
+    o = analysis.oracle(conn, [OFF, HIGH], ["P/x"])
+    assert o["solved"] == 0
+    assert o["cost"] == pytest.approx(0.003), "should pay the cheapest attempt"
+
+
+def test_common_problems_requires_every_named_config(conn):
+    add(conn, "P/both", OFF, think=0, cost=0.001, passed=True)
+    add(conn, "P/both", HIGH, think=500, cost=0.01, passed=True)
+    add(conn, "P/one", OFF, think=0, cost=0.001, passed=True)
+    assert analysis.common_problems(conn, [OFF, HIGH]) == ["P/both"]

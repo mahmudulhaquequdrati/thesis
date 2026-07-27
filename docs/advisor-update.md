@@ -88,6 +88,27 @@ both effort arms graded:
 established despite distinct point estimates. That is the reason §10.2 asks for
 bootstrapped CPC, and it would have been invisible without them.
 
+**(b3) There is real headroom for routing — 13.8 points.** Over the largest
+valid comparison set (6 configs × 60 shared problems), the cost-accuracy hull
+has only two vertices:
+
+| config | cost/problem | accuracy | 95% CI | |
+|---|---|---|---|---|
+| deepseek-v4-flash \| off | $0.00016 | 65.0% | [52, 77] | **hull** |
+| deepseek-v4-flash \| high | $0.00177 | 98.3% | [95, 100] | **hull** |
+| deepseek-v4-pro \| high | $0.01088 | 95.0% | [88, 100] | dominated |
+| qwen3.6-35b-a3b \| high | $0.01093 | 68.3% | [57, 80] | dominated |
+
+Note `deepseek-v4-pro | high` costs **6× more than `flash | high` for 3 points
+less accuracy**. The expensive frontier model is not worth its price here.
+
+The oracle (cheapest config that solves each problem) reaches 98.3% at
+$0.00111/problem. A problem-*blind* mixture at the same budget reaches 84.5%.
+**The 13.8-point gap is the measured value of problem-level information** —
+the honest headroom for any router, and the sharp form of RQ4 that §10.1 asks
+for. It also contradicts my earlier routing-collapse worry, which rested on 16
+problems.
+
 **(c) The platform advertises controls it does not enforce.** Two instances:
 
 * *Provider routing.* One model slug is served by 18 providers at $0.87–$3.48

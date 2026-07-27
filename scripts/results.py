@@ -108,6 +108,42 @@ def main() -> None:
                 print(f"    {a['model_slug']}|{a['effort_label']} vs "
                       f"{b['model_slug']}|{b['effort_label']}")
 
+    # ------------------------------------------------ frontier and its hull
+    cfg_ids, front_probs = analysis.frontier_subset(conn, min_problems=50)
+    if len(cfg_ids) >= 3 and len(front_probs) >= 20:
+        rule(f"RQ4  Cost-accuracy frontier  ({len(cfg_ids)} configs x "
+             f"{len(front_probs)} shared problems)")
+        print("  Only configs measured on the SAME problems can be compared. All")
+        print("  ten share just 5 problems, so this is the largest usable set.")
+        pts = analysis.frontier(conn, cfg_ids, front_probs, seed=seed,
+                                n_resamples=1200)
+        front = analysis.pareto_front(pts)
+        hull = analysis.upper_hull(front)
+        hull_ids = {p["config_id"] for p in hull}
+        front_ids = {p["config_id"] for p in front}
+        print(f"\n  {'config':32} {'cost/problem':>13} {'accuracy':>9} "
+              f"{'95% CI':>12}  {'':6}")
+        for p in pts:
+            tag = ("HULL" if p["config_id"] in hull_ids
+                   else "pareto" if p["config_id"] in front_ids
+                   else "dominated")
+            print(f"  {p['model_slug'] + '|' + p['effort_label']:32} "
+                  f"${p['cost']:>12.5f} {p['accuracy']:>8.1f}% "
+                  f"{ci_str(p['acc_lo'], p['acc_hi'], pct=True):>12}  {tag}")
+
+        orc = analysis.oracle(conn, cfg_ids, front_probs)
+        blind = analysis.hull_accuracy_at(hull, orc["cost"])
+        print(f"\n  ORACLE (cheapest config that solves each problem):")
+        print(f"    {orc['accuracy']:.1f}% at ${orc['cost']:.5f}/problem")
+        if blind is not None:
+            print(f"  CONVEX HULL at the same budget (problem-blind mixing):")
+            print(f"    {blind:.1f}%")
+            print(f"\n  VALUE OF PROBLEM-LEVEL INFORMATION: "
+                  f"{orc['accuracy'] - blind:+.1f} percentage points")
+            print("    This is the headroom any router has to play for. The hull")
+            print("    is the honest baseline -- beating the best SINGLE config")
+            print("    is nearly free, because mixing two already beats it.")
+
     rule("RQ3  What would a reasoning-length abort have saved?")
     print("  (an aborted call is billed $0 -- measured, not assumed)")
     curve = analysis.abort_curve_ci(conn, seed=seed, n_resamples=1500)
