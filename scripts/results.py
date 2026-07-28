@@ -144,6 +144,50 @@ def main() -> None:
             print("    is the honest baseline -- beating the best SINGLE config")
             print("    is nearly free, because mixing two already beats it.")
 
+    # ------------------------------------------------- RQ4b: does a router help
+    if len(cfg_ids) >= 3 and len(front_probs) >= 20:
+        from carr import router as rt
+
+        grid = rt.outcome_grid(conn, cfg_ids, front_probs)
+        costs = {c: sum(g[c]["cost"] for g in grid.values() if c in g)
+                 for c in cfg_ids}
+        cheap, dear = min(costs, key=costs.get), max(costs, key=costs.get)
+
+        rule("RQ4b  Can a free-feature router beat the hull?")
+        print("  Features are free: difficulty tier, test count, prompt length.")
+        print("  No forward pass, no draft answer. Leave-one-out CV.\n")
+        print(f"  {'strategy':26} {'accuracy':>9} {'cost/problem':>14} {'configs used':>13}")
+        for label, r in (("always cheapest", rt.route_always(cheap)),
+                         ("always dearest", rt.route_always(dear)),
+                         ("rule: think if hard", rt.route_by_difficulty(cheap, dear)),
+                         ("k-NN (k=5)", rt.route_knn(5))):
+            e = rt.evaluate(conn, r, cfg_ids, front_probs, fallback=cheap)
+            print(f"  {label:26} {e['accuracy']:>8.1f}% ${e['cost']:>13.5f} "
+                  f"{e['distinct_configs_used']:>13}")
+
+        d = rt.decompose_gap(conn, cfg_ids, front_probs, k=5)
+        print(f"\n  GAP DECOMPOSITION (section 10.2)")
+        print(f"    oracle, needs the answers          {d['oracle']['accuracy']:>6.1f}%")
+        print(f"    ceiling from these features alone  "
+              f"{d['feature_ceiling']['accuracy']:>6.1f}%   "
+              f"({d['feature_ceiling']['buckets']} buckets, "
+              f"{d['feature_ceiling']['problems_per_bucket']:.1f} problems each)")
+        print(f"    k-NN actually achieves             {d['router']['accuracy']:>6.1f}%")
+        print(f"\n    feature insufficiency  {d['feature_insufficiency']:>6.1f} points"
+              f"   -> better FEATURES needed")
+        print(f"    estimation error       {d['estimation_error']:>6.1f} points"
+              f"   -> better METHOD needed")
+        if d["router_minus_hull"] is not None:
+            print(f"    router minus hull      {d['router_minus_hull']:>+6.1f} points"
+                  f"   -> value the router adds")
+        if d["router"]["distinct_configs_used"] == 1:
+            print("\n    The router COLLAPSED to a single configuration. The")
+            print("    cheapest-solving label is dominated by one config, so a")
+            print("    nearest-neighbour vote predicts it everywhere. This is the")
+            print("    degenerate outcome 'When Routing Collapses' describes, and")
+            print("    the decomposition says the cause is the ESTIMATOR, not the")
+            print("    features -- they are sufficient to reach the oracle.")
+
     rule("RQ3  What would a reasoning-length abort have saved?")
     print("  (an aborted call is billed $0 -- measured, not assumed)")
     curve = analysis.abort_curve_ci(conn, seed=seed, n_resamples=1500)

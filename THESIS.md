@@ -22,6 +22,7 @@
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
+- `2026-07-27` — **Router + §10.2 gap decomposition built. RQ4 answered, and the answer is negative-but-diagnostic. $0 spent.** `carr/router.py`: free features only (difficulty tier, test count, prompt length — no forward pass, no drafts), leave-one-out CV over the 6-config × 60-problem shared set. **The k-NN router COLLAPSED to a single configuration** — 65.0% accuracy, exactly matching the convex hull, adding **+0.0 points**. That is the degenerate outcome *When Routing Collapses* names, now measured in our own data. **The decomposition says why, and this is the useful part:** feature insufficiency **0.0 points**, estimation error **33.3 points**. The free features are *sufficient* to reach the oracle's 98.3% — a ceiling computed over 12 feature buckets hits 98.3% exactly. **The estimator is what fails**, because the cheapest-solving label is dominated by one config so a nearest-neighbour vote predicts it everywhere. A negative RQ4 result that says *which direction to fix* is worth more than a marginal positive one. ⚠️ Caveat recorded in code: the feature ceiling is *fitted*, 12 buckets over 60 problems (5 each), so it is an optimistic upper bound rather than an achievable target.
 - `2026-07-27` — **Figures built (`carr/figures.py` + `scripts/make_figures.py`). $0 spent.** Four PNGs into `data/figures/` (gitignored, regenerated, never hand-edited): pass rate off-vs-on per tier, reasoning length by outcome, the cost-accuracy frontier with its hull and the oracle gap, and the abort tradeoff with its CI band. **Error bars on everything that has an interval** — a bare chart of these numbers would imply precision the data lacks. Greyscale-safe, sample sizes printed on the panels, y-axes start at zero. `matplotlib` added (the only new dependency all project; the convex hull still needs no `scipy`). Two tests: figures render from a realistic database, and `make_all` survives one panel failing rather than losing them all.
 - `2026-07-27` — **[docs/research-framing.md](docs/research-framing.md) written — the thesis stated as research, not code.** The build and the science had drifted apart; this states the question, the findings with real numbers, the honest contribution, what it is *not*, and a chapter map. **The thinking arm's numbers moved a lot as grading finished**: on LCB hard, reasoning now **more than doubles** the pass rate (24.9% → **54.2%**, n=462/118) where the 16-problem pilot claimed it *hurt*; on medium, 53.3% → **76.4%**. Also: **49 calls burned a mean of 29,584 reasoning tokens and returned nothing**, ~15% of all spend. 141 of 320 problems discriminate. Chapters 3–7 are effectively built; what remains is prose, figures and the §14 `.docx` edits.
 - `2026-07-27` — **§10.1 built: Pareto frontier, convex hull and the MCKP oracle. No scipy needed, $0 spent.** A 2D upper hull is a twenty-line monotone chain; adding a heavyweight dependency for that would have been silly. Computed over the largest valid set — **6 configs × 60 shared problems** (all ten share only 5, which is useless). **Three results.** (1) **The hull has just two vertices**: `flash|off` ($0.00016/problem, 65.0%) and `flash|high` ($0.00177, 98.3%). Everything else is *dominated* — including `deepseek-v4-pro|high`, which costs **6× more than `flash|high` for 3 points less accuracy** (95.0% vs 98.3%). The expensive frontier model is simply not worth its price here. (2) **The oracle reaches 98.3% at $0.00111/problem**, cheaper than any single config achieving that accuracy. (3) **Value of problem-level information: +13.8 points** — a problem-blind mixture at the oracle's budget reaches only 84.5%. That is the honest headroom a router has to play for, and it is the sharp form of RQ4 that §10.1 asks for: *"CARR's margin over the convex hull is the measured value of problem-level information."* Contradicts the earlier routing-collapse worry, which rested on 16 problems.
@@ -149,7 +150,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 | ⬜ | 2 | Pilot: 15 **difficulty-spread** problems × 10 configs → thinking tokens on HARD problems + **saturation rate** | **~$0.29** (worst case $2.37) |
 | ⬜ | 3–4 | **Full grid run** (cheapest configs first) | $18–28 |
 | ✅ | 5 | RQ1–RQ3: Pareto frontier, convex hull, CPC/TPC with CIs | **Done.** `carr/stats.py` + `analysis.{frontier,pareto_front,upper_hull,oracle}`. No scipy — the hull is a monotone chain. 107 tests |
-| ⬜ | 6–7 | CARR: features, oracle, rules, k-NN, 4 scenarios, gap decomposition | $0 |
+| 🟨 | 6–7 | CARR: features, oracle, rules, k-NN, 4 scenarios, gap decomposition | **features, oracle, rules, k-NN, gap decomposition ✅** (`carr/router.py`, 10 tests). The 4 budget scenarios ⬜ |
 | 🟨 | 8–9 | Formal section + figure generation | **Figures ✅** (4 PNGs, `carr/figures.py`). Formal section: §10.1 hull/oracle built; §10.2 gap decomposition still ⬜ |
 | ⬜ | 10–12 | Thesis writing, polish, submission | $0 |
 
@@ -239,6 +240,7 @@ thesis/
 │   ├── stats.py             ✅ # seeded bootstrap CIs. Stdlib only, no scipy
 │   ├── analysis.py          ✅ # saturation, waste, CPC/TPC, frontier, hull, oracle
 │   ├── figures.py           ✅ # 4 PNGs → data/figures/ (gitignored)
+│   ├── router.py            ✅ # free features, k-NN, rules, §10.2 decomposition
 │   ├── cost.py              ✅ # tokens → USD (reasoning ⊂ completion, never added twice)
 │   ├── benchmarks/
 │   │   └── livecodebench.py ✅ # download, cache, decode. HE+/MBPP+ come from evalplus
@@ -274,6 +276,7 @@ thesis/
     ├── test_verify.py       ✅ # 8 tests — the grader must be right
     ├── test_verify_lcb.py   ✅ # 11 tests — hand-written references, no canonicals exist
     ├── test_runner.py       ✅ # 16 tests — THE COST CAP. Proves it aborts
+    ├── test_router.py       ✅ # 10 tests — LOO honesty, and the decomposition's blame
     ├── test_extract.py      ✅ # 11 tests — extraction must never raise or invent
     └── test_db.py           ✅ # 13 tests — never pay twice
 ```

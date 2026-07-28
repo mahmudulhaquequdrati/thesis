@@ -145,6 +145,32 @@ is beating the mixture.
 
 ---
 
+### 3.7 A router cannot exploit that headroom — and we can say why
+
+A k-NN router over the free features (difficulty, test count, prompt length),
+evaluated leave-one-out, reaches **65.0%** — **exactly the convex hull**, adding
+**nothing**. It collapsed to a single configuration.
+
+The gap decomposition (§10.2) locates the fault:
+
+| | |
+|---|---|
+| oracle, needs the answers | 98.3% |
+| ceiling from these features alone | **98.3%** |
+| k-NN actually achieves | **65.0%** |
+| **feature insufficiency** | **0.0 points** |
+| **estimation error** | **33.3 points** |
+
+**The features are sufficient; the estimator is not.** The cheapest-solving
+label is dominated by one configuration, so a nearest-neighbour vote predicts it
+everywhere — the collapse is a property of the *objective*, not the inputs. The
+fix is a cost-aware objective rather than modal-label classification, and that
+is a concrete piece of future work rather than a shrug.
+
+A negative result that says *which direction to fix* is worth more than a
+marginal positive one. (Caveat: the feature ceiling is fitted over 12 buckets on
+60 problems, so it is an optimistic bound.)
+
 ## 4. What the contribution honestly is
 
 ### 4.1 The table itself
