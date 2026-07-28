@@ -7,6 +7,12 @@ picks the cheapest (model, thinking-mode) pair that still solves the problem.
 **New here? Read [docs/START-HERE.md](docs/START-HERE.md)** — the whole project
 in about an hour, with something to run at each step.
 
+**Want it from zero, properly? Take [docs/learn/](docs/learn/00-index.md)** — a
+40-lesson course assuming no prior knowledge: foundations (LLMs, tokens, money,
+benchmarks, SQL, statistics), every finding, every module of the code, and how to
+write and defend the thesis. About six weeks at an hour a day. Nothing in it
+costs money.
+
 **Read [THESIS.md](THESIS.md)** — it is the single source of truth for
 what this is, how it is built, what is done, and what comes next.
 
@@ -85,7 +91,7 @@ Other free checks:
 ```bash
 uv run python scripts/verify_roster.py        # roster vs OpenRouter's live /models
 uv run python scripts/estimate_cost.py        # price the grid before running it
-uv run pytest                                  # 32 tests
+uv run pytest                                  # 119 tests
 ```
 
 ## Layout
@@ -94,7 +100,8 @@ uv run pytest                                  # 32 tests
 |---|---|
 | `THESIS.md` | Master document — status, plan, schema, science, glossary |
 | `CLAUDE.md` | Working rules, incl. the mandatory doc-update ritual and the $50 budget cap |
-| `docs/START-HERE.md` | **Learn the project here** — science, data, code, in reading order |
+| `docs/START-HERE.md` | **The project in an hour** — science, data, code, in reading order |
+| `docs/learn/` | **The full course, 40 lessons from zero** — foundations, findings, code, writing, defence |
 | `docs/research-framing.md` | The thesis as research: question, findings, contribution, limits |
 | `docs/docx-revisions.md` | The 14 edits owed to the proposal before submission |
 | `docs/codebase-tour.md` | Longer file-by-file walk. Written early; partly stale |

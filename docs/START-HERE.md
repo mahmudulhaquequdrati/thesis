@@ -214,6 +214,7 @@ diff /tmp/a.txt /tmp/b.txt        # must be identical
 
 | document | for |
 |---|---|
+| [**learn/**](learn/00-index.md) | **The long road.** A 40-lesson course assuming zero prior knowledge — foundations, every finding, every module, and how to write and defend the thesis. ~6 weeks at an hour a day |
 | [research-framing.md](research-framing.md) | **The science.** Question, findings, contribution, what it is *not* |
 | [docx-revisions.md](docx-revisions.md) | The 14 edits owed to your proposal |
 | [advisor-update.md](advisor-update.md) | The one-pager to send |
