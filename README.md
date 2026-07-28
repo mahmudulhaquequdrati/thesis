@@ -4,7 +4,10 @@ Undergraduate thesis: measuring the cost-vs-accuracy tradeoff of open-weight
 reasoning models on code generation, and building a training-free router that
 picks the cheapest (model, thinking-mode) pair that still solves the problem.
 
-**Read [THESIS.md](THESIS.md) first** — it is the single source of truth for
+**New here? Read [docs/START-HERE.md](docs/START-HERE.md)** — the whole project
+in about an hour, with something to run at each step.
+
+**Read [THESIS.md](THESIS.md)** — it is the single source of truth for
 what this is, how it is built, what is done, and what comes next.
 
 ## Setup
@@ -91,7 +94,10 @@ uv run pytest                                  # 32 tests
 |---|---|
 | `THESIS.md` | Master document — status, plan, schema, science, glossary |
 | `CLAUDE.md` | Working rules, incl. the mandatory doc-update ritual and the $50 budget cap |
-| `docs/codebase-tour.md` | **Learn the code here** — every file explained, in order |
+| `docs/START-HERE.md` | **Learn the project here** — science, data, code, in reading order |
+| `docs/research-framing.md` | The thesis as research: question, findings, contribution, limits |
+| `docs/docx-revisions.md` | The 14 edits owed to the proposal before submission |
+| `docs/codebase-tour.md` | Longer file-by-file walk. Written early; partly stale |
 | `docs/data-spec.md` | Exact contract: what we send, what we store, every column |
 | `Thesis_Project_Proposal.docx` | The submitted proposal (Revision 2) |
 | `scripts/` | Runnable entry points. **`view.py`, not `inspect.py`** — that name shadows the stdlib module and breaks every other script here |

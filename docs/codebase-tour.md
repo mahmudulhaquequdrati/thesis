@@ -1,3 +1,9 @@
+> ⚠️ **Written early in the project.** It is accurate about the files it covers,
+> but it predates `carr/stats.py`, `carr/figures.py`, `carr/router.py`,
+> `carr/benchmarks/livecodebench.py` and five scripts, and some of its "NOT BUILT
+> YET" notes are now wrong. For a current, ordered introduction read
+> **[START-HERE.md](START-HERE.md)** first.
+
 # Codebase tour — everything, in order
 
 A teaching walkthrough of every file in this repository: what it is, why it
@@ -517,6 +523,13 @@ scripts. Not built: the runner, the database, the analysis, the router.
 
 # Part 4 — What does not exist yet
 
+**Built since, and not described below:** `carr/stats.py` (bootstrap CIs),
+`carr/analysis.py` (saturation, waste, CPC/TPC, frontier, hull, oracle),
+`carr/router.py` (features, k-NN, gap decomposition), `carr/figures.py`,
+`carr/benchmarks/livecodebench.py`, `carr/execute/_lcb_runner.py`, and the
+scripts `run_one.py`, `grade.py`, `results.py`, `make_figures.py`,
+`verify_roster.py`. Data collection finished at $5.24; the analysis is complete.
+
 Honest gaps, in priority order:
 
 Built since this tour was first written (2026-07-26): **`carr/db.py`**
@@ -528,6 +541,13 @@ The chain was proven end to end against a mock provider, and then the mock was
 deleted — it had done its job. `data/carr.sqlite` now holds only real, free
 data: 542 problems and 10 configs. `generations` and `results` are **empty on
 purpose**; the only way to fill them is to buy the rows.
+
+**Built since, and not described below:** `carr/stats.py` (bootstrap CIs),
+`carr/analysis.py` (saturation, waste, CPC/TPC, frontier, hull, oracle),
+`carr/router.py` (features, k-NN, gap decomposition), `carr/figures.py`,
+`carr/benchmarks/livecodebench.py`, `carr/execute/_lcb_runner.py`, and the
+scripts `run_one.py`, `grade.py`, `results.py`, `make_figures.py`,
+`verify_roster.py`. Data collection finished at $5.24; the analysis is complete.
 
 Honest gaps, in priority order:
 
