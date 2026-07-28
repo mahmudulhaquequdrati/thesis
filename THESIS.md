@@ -22,6 +22,7 @@
 | **Blocked on** | Nothing. ⚠️ But see the saturation evidence in §11 before choosing the pilot sample |
 
 **Recent log**
+- `2026-07-27` — **[docs/docx-revisions.md](docs/docx-revisions.md) — the submission checklist. $0 spent.** Fourteen ordered edits to the proposal, each carrying the number that justifies it. §14's old list was stale in three ways: it still called the thesis a router, still quoted a 717-problem pool (now 884), and still carried "MBPP 500 → 150" from the $50-budget era. §14 now points at the new document rather than duplicating it. **Four edits are structural**: the title/framing (the router adds +0.0 points, so the thesis is a measurement study), the §3 gap analysis (four closer works landed after the proposal), every LiveCodeBench contamination claim (the property does not hold), and a new measurement-validity section (nothing equivalent exists, and it is the most transferable material here).
 - `2026-07-27` — **Router + §10.2 gap decomposition built. RQ4 answered, and the answer is negative-but-diagnostic. $0 spent.** `carr/router.py`: free features only (difficulty tier, test count, prompt length — no forward pass, no drafts), leave-one-out CV over the 6-config × 60-problem shared set. **The k-NN router COLLAPSED to a single configuration** — 65.0% accuracy, exactly matching the convex hull, adding **+0.0 points**. That is the degenerate outcome *When Routing Collapses* names, now measured in our own data. **The decomposition says why, and this is the useful part:** feature insufficiency **0.0 points**, estimation error **33.3 points**. The free features are *sufficient* to reach the oracle's 98.3% — a ceiling computed over 12 feature buckets hits 98.3% exactly. **The estimator is what fails**, because the cheapest-solving label is dominated by one config so a nearest-neighbour vote predicts it everywhere. A negative RQ4 result that says *which direction to fix* is worth more than a marginal positive one. ⚠️ Caveat recorded in code: the feature ceiling is *fitted*, 12 buckets over 60 problems (5 each), so it is an optimistic upper bound rather than an achievable target.
 - `2026-07-27` — **Figures built (`carr/figures.py` + `scripts/make_figures.py`). $0 spent.** Four PNGs into `data/figures/` (gitignored, regenerated, never hand-edited): pass rate off-vs-on per tier, reasoning length by outcome, the cost-accuracy frontier with its hull and the oracle gap, and the abort tradeoff with its CI band. **Error bars on everything that has an interval** — a bare chart of these numbers would imply precision the data lacks. Greyscale-safe, sample sizes printed on the panels, y-axes start at zero. `matplotlib` added (the only new dependency all project; the convex hull still needs no `scipy`). Two tests: figures render from a realistic database, and `make_all` survives one panel failing rather than losing them all.
 - `2026-07-27` — **[docs/research-framing.md](docs/research-framing.md) written — the thesis stated as research, not code.** The build and the science had drifted apart; this states the question, the findings with real numbers, the honest contribution, what it is *not*, and a chapter map. **The thinking arm's numbers moved a lot as grading finished**: on LCB hard, reasoning now **more than doubles** the pass rate (24.9% → **54.2%**, n=462/118) where the 16-problem pilot claimed it *hurt*; on medium, 53.3% → **76.4%**. Also: **49 calls burned a mean of 29,584 reasoning tokens and returned nothing**, ~15% of all spend. 141 of 320 problems discriminate. Chapters 3–7 are effectively built; what remains is prose, figures and the §14 `.docx` edits.
@@ -664,17 +665,27 @@ HumanEval+ and MBPP are **nearly saturated** for 2026-class reasoning models. If
 
 ## §14. Edits required to the .docx before submission
 
-1. **§6.1** — remove GLM-5.1; state **three families / five open-weight models**; acknowledge the within-family caveat
-2. **§1, §4-RQ4** — comparison target becomes **the convex hull of the frontier**, not "strongest single configuration"
-3. **§5.3** — note CARR-oracle is the MCKP integer optimum, not an ad-hoc ceiling
-4. **§6.2** — MBPP 500 → **150**; LiveCodeBench 200 → **120** hard/medium-weighted, with rationale (a $50 inference budget; state it plainly — budget-constrained sampling is normal and honest)
-5. **§6.3** — CPC/TPC reported with bootstrap confidence intervals
-6. **§8** — add benchmark saturation to the risk table; cite [When Routing Collapses](https://arxiv.org/pdf/2602.03478), which names the phenomenon
-7. **§3 — rewrite the gap analysis (biggest edit owed).** Add Route-To-Reason, DART, HRBench, LLMRouterBench. Re-position from "first joint (model × effort) router" to "the cheapest possible router" (§15.3)
-8. **§1, §9** — drop "first systematic evaluation"; HRBench (May 2026) covers much of that ground
-9. **⚠️ Wherever LiveCodeBench is cited for contamination resistance — rewrite it.** The property does not hold: LCB's newest problem is 2025-04-06, the dataset stopped updating 2025-06-05, and every roster model is a 2026 release. Re-position LCB as the *difficulty* tier that keeps RQ4 from degenerating, and state the contamination exposure as a limitation with the `release_date` distribution to back it up (§9, §11)
-10. **§6.2 problem counts** — the pool is **717** (HumanEval+ 164, MBPP+ 378, LCB 175); the *run* set is ~300 and is set by the pilot. State pool and sample separately; the current text conflates them
-11. **§6.2 / methods** — note that LCB problems are graded by a second harness (stdin→stdout and `Solution`-method execution) with hand-written reference solutions, because LCB ships no canonical implementations
+➡️ **The working list now lives in [docs/docx-revisions.md](docs/docx-revisions.md)**
+— fourteen edits, ordered, each with the number that justifies it and a note on
+which are structural.
+
+That document supersedes the list that used to sit here, which predated the
+reframing and was wrong in three ways: it still described the thesis as a
+router, still quoted a 717-problem pool (now 884), and still carried
+"MBPP 500 → 150" sampling figures from the $50-budget era.
+
+The four that would be actively wrong if left:
+
+1. **Title and framing** — the router does not work (it adds +0.0 points over
+   the hull and collapses to one config). The thesis is a measurement study.
+2. **§3 gap analysis** — Agent-as-a-Router, Route-To-Reason, DART and HRBench
+   all landed after the proposal. Claim the measurement, not a novel router.
+3. **Every LiveCodeBench contamination claim** — the property does not hold
+   for us. LCB is a difficulty tier; the exposure is a limitation.
+4. **Add a measurement-validity section** — provider routing, ignored reasoning
+   budgets, non-binding `max_tokens`, and free stream cancellation. Nothing
+   equivalent exists in the proposal, and it is the most transferable material
+   in the thesis.
 
 ---
 
