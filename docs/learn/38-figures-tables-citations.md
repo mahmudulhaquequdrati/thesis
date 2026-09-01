@@ -182,7 +182,7 @@ list.
 **3. Run the consistency grep** above and fix anything inconsistent, in the
 repository *and* in the `.docx`.
 
-**4. Do the figures-only test.** Show someone the four figures with captions and
+**4. Do the figures-only test.** Show someone the five figures with captions and
 nothing else. Ask what the thesis found. If they can tell you, the figures are
 carrying their weight.
 

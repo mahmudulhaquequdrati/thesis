@@ -26,11 +26,16 @@ def conn(tmp_path):
 
 def add(conn, problem_id, config_id, *, think, cost, passed,
         difficulty=None, benchmark="livecodebench", finish="stop",
-        error=None, is_mock=0, graded=True):
-    """One synthetic (problem, config) cell with a known outcome."""
+        error=None, is_mock=0, graded=True, entry_point="f"):
+    """One synthetic (problem, config) cell with a known outcome.
+
+    `entry_point=""` makes a LiveCodeBench problem stdin-style -- that is how
+    the loader stores them, and how analysis._STYLE tells the two LCB execution
+    styles apart. The column is NOT NULL, so empty string rather than None.
+    """
     if db.get_problem(conn, problem_id) is None:
         db.upsert_problem(conn, problem_id=problem_id, benchmark=benchmark,
-                          prompt="p", entry_point="f", n_base_tests=1,
+                          prompt="p", entry_point=entry_point, n_base_tests=1,
                           n_plus_tests=1, difficulty=difficulty)
     gen_id = db.insert_generation(
         conn, problem_id=problem_id, config_id=config_id,
@@ -464,3 +469,267 @@ def test_one_bad_figure_does_not_lose_the_others(conn, tmp_path):
     finally:
         figures.FIGURE_DIR = original
     assert len(made) >= 1, "every figure failed when one should have survived"
+
+
+# ------------------------------------------------------------ style confound
+#
+# The headline off-vs-on comparison was confounded by LiveCodeBench's two
+# execution styles, because the runner's problem_id tiebreak put every LeetCode
+# problem ahead of every AtCoder one and the cost cap fired inside that prefix.
+# These pin the reporting that makes it visible.
+
+
+def test_style_composition_separates_the_two_lcb_styles(conn):
+    """entry_point is what distinguishes a Solution-class task from a stdin one."""
+    add(conn, "LCB/1", OFF, think=0, cost=0.001, passed=True,
+        difficulty="hard", entry_point="solve")
+    add(conn, "LCB/abc_a", OFF, think=0, cost=0.001, passed=False,
+        difficulty="hard", entry_point="")
+
+    rows = {(r["style"], r["effort"]): r for r in analysis.style_composition(conn)}
+    assert rows[("functional", "off")]["n"] == 1
+    assert rows[("functional", "off")]["pct"] == 100.0
+    assert rows[("stdin", "off")]["n"] == 1
+    assert rows[("stdin", "off")]["pct"] == 0.0
+
+
+def test_style_matched_effect_drops_arms_too_thin_to_compare(conn):
+    """An n=1 arm must not print a rate that reads like a finding."""
+    for i in range(40):
+        add(conn, f"LCB/{i}", OFF, think=0, cost=0.001, passed=i < 20,
+            difficulty="hard", entry_point="solve")
+        add(conn, f"LCB/{i}", HIGH, think=900, cost=0.01, passed=i < 30,
+            difficulty="hard", entry_point="solve")
+    # stdin: a full off arm, but a single thinking call
+    for i in range(40):
+        add(conn, f"LCB/abc_{i}", OFF, think=0, cost=0.001, passed=False,
+            difficulty="hard", entry_point="")
+    add(conn, "LCB/abc_0", HIGH, think=900, cost=0.01, passed=True,
+        difficulty="hard", entry_point="")
+
+    matched = {(m["tier"], m["style"]): m for m in analysis.style_matched_effect(conn)}
+    assert ("hard", "functional") in matched
+    assert ("hard", "stdin") not in matched, "an n=1 arm must be dropped"
+    assert matched[("hard", "functional")]["matched_gap"] == pytest.approx(25.0)
+
+
+def test_matched_gap_is_smaller_than_the_confounded_raw_gap(conn):
+    """The whole reason this reporting exists: composition inflates the raw gap.
+
+    Built so the styles differ in difficulty and the thinking arm sits almost
+    entirely on the easier one -- which is exactly the shape of the real grid.
+    """
+    for i in range(40):                       # easy style, both arms present
+        add(conn, f"LCB/{i}", OFF, think=0, cost=0.001, passed=i < 20,
+            difficulty="hard", entry_point="solve")
+        add(conn, f"LCB/{i}", HIGH, think=900, cost=0.01, passed=i < 28,
+            difficulty="hard", entry_point="solve")
+    for i in range(60):                       # hard style, off arm only
+        add(conn, f"LCB/abc_{i}", OFF, think=0, cost=0.001, passed=False,
+            difficulty="hard", entry_point="")
+
+    m = next(x for x in analysis.style_matched_effect(conn)
+             if x["style"] == "functional")
+    assert m["matched_gap"] == pytest.approx(20.0)      # 50% -> 70%
+    assert m["raw_gap"] > m["matched_gap"], (
+        "the raw gap must look larger, which is the confound being reported")
+
+
+# --------------------------------------------------- coverage and unanimity
+#
+# "Only 141 of 320 problems discriminate" is substantially a coverage artefact:
+# unanimity is trivially easier to reach with fewer voters, and 206 of the 320
+# problems saw only two or three configurations. These pin the reporting.
+
+
+def test_unanimity_is_easier_with_fewer_voters(conn):
+    """The same problem flips out of 'all solved' once a config disagrees."""
+    add(conn, "P/x", OFF, think=0, cost=0.001, passed=True, difficulty="hard")
+    assert analysis.discriminating_problems(conn).get("all solved") == 1
+
+    add(conn, "P/x", HIGH, think=900, cost=0.01, passed=False, difficulty="hard")
+    after = analysis.discriminating_problems(conn)
+    assert after.get("all solved", 0) == 0
+    assert after.get("discriminating") == 1
+
+
+def test_min_configs_excludes_thinly_covered_problems(conn):
+    add(conn, "P/thin", OFF, think=0, cost=0.001, passed=False, difficulty="hard")
+    for cid in (OFF, HIGH):
+        add(conn, "P/thick", cid, think=100, cost=0.001,
+            passed=cid == HIGH, difficulty="hard")
+
+    assert sum(analysis.discriminating_problems(conn, min_configs=1).values()) == 2
+    assert sum(analysis.discriminating_problems(conn, min_configs=2).values()) == 1
+
+
+def test_coverage_report_separates_never_asked_from_never_solved(conn):
+    """A problem no THINKING config attempted is not evidence nothing solves it."""
+    # never attempted by a thinking config, and the cheap arm failed
+    add(conn, "P/unasked", OFF, think=0, cost=0.001, passed=False, difficulty="hard")
+    # attempted by both arms, and the thinking arm solved it
+    add(conn, "P/asked", OFF, think=0, cost=0.001, passed=False, difficulty="hard")
+    add(conn, "P/asked", HIGH, think=900, cost=0.01, passed=True, difficulty="hard")
+
+    rows = {r["min_configs"]: r for r in analysis.discrimination_by_coverage(conn)}
+    assert rows[1]["none solved"] == 1, "counted over everything, one looks unsolvable"
+    assert rows["1 thinking"]["none solved"] == 0, (
+        "restricted to problems a thinking config actually saw, none is unsolvable")
+    assert rows["1 thinking"]["discriminating"] == 1
+
+
+# ------------------------------------------------- the effect is per model
+#
+# The aggregate off-vs-on comparison averages over models that respond to
+# reasoning in opposite directions (+52.9 on one, -18.2 on another, on the same
+# tier). These pin the per-model reporting and the censoring column that
+# separates non-termination from genuine degradation.
+
+FLASH_HIGH = next(c.config_id for c in load_configs()
+                  if c.effort_label == "high" and "flash" in c.model_slug)
+FLASH_OFF = next(c.config_id for c in load_configs()
+                 if c.effort_label == "off" and "flash" in c.model_slug)
+
+
+def test_within_model_effect_keeps_opposite_signs_apart(conn):
+    """Two models moving opposite ways must not be averaged into one number."""
+    for i in range(20):                        # reasoning helps this model
+        add(conn, f"A/{i}", FLASH_OFF, think=0, cost=0.001,
+            passed=i < 4, difficulty="hard")
+        add(conn, f"A/{i}", FLASH_HIGH, think=900, cost=0.01,
+            passed=i < 16, difficulty="hard")
+    for i in range(20):                        # reasoning hurts this one
+        add(conn, f"B/{i}", OFF, think=0, cost=0.001,
+            passed=i < 16, difficulty="hard")
+        add(conn, f"B/{i}", HIGH, think=900, cost=0.01,
+            passed=i < 4, difficulty="hard")
+
+    rows = analysis.within_model_effect(conn)
+    deltas = {r["model"]: r["delta"] for r in rows}
+    assert len(deltas) == 2
+    assert max(deltas.values()) == pytest.approx(60.0)
+    assert min(deltas.values()) == pytest.approx(-60.0)
+
+
+def test_censoring_column_distinguishes_the_two_failure_modes(conn):
+    """A negative delta from truncation reads differently from one that is not."""
+    for i in range(20):
+        add(conn, f"T/{i}", OFF, think=0, cost=0.001, passed=True,
+            difficulty="hard")
+        # every thinking call stopped at the ceiling: cannot have succeeded
+        add(conn, f"T/{i}", HIGH, think=48000, cost=0.05, passed=False,
+            difficulty="hard", finish="length")
+
+    row = next(r for r in analysis.within_model_effect(conn))
+    assert row["delta"] < 0
+    assert row["censored_pct"] == pytest.approx(100.0), (
+        "the reader must be able to see the negative delta is truncation")
+
+
+def test_thin_arms_are_not_reported(conn):
+    add(conn, "S/1", OFF, think=0, cost=0.001, passed=True, difficulty="hard")
+    add(conn, "S/1", HIGH, think=900, cost=0.01, passed=False, difficulty="hard")
+    assert analysis.within_model_effect(conn) == []
+
+
+# -------------------------- the router and the analysis must agree on "solved"
+#
+# `outcome_grid` had its own inline copy of the _WASTED logic. The router's
+# routing LABEL is derived from that column, so a divergence would mean the
+# router and the frontier were scored against different ground truth -- and
+# nothing downstream would notice.
+
+
+def test_router_and_analysis_score_solved_identically(conn):
+    """The routing label and the frontier must come from one definition."""
+    from carr import router
+
+    add(conn, "P/1", OFF, think=0, cost=0.001, passed=True, difficulty="hard")
+    add(conn, "P/1", HIGH, think=40000, cost=0.05, passed=True,
+        difficulty="hard", finish="length")
+
+    grid = router.outcome_grid(conn, [OFF, HIGH], ["P/1"])
+    per = analysis._per_problem_config(conn, ["P/1"])
+    for cid in (OFF, HIGH):
+        assert grid["P/1"][cid]["solved"] == per[cid][0]["solved"]
+
+
+def test_the_per_model_figure_renders_and_shows_both_signs(conn, tmp_path):
+    """Figure 5 exists to show a sign reversal, so it must survive negatives.
+
+    A bar chart of deltas is the one panel where an all-positive test database
+    would hide the bug it is drawn to expose.
+    """
+    from carr import figures
+
+    for i in range(20):                       # reasoning helps this model
+        add(conn, f"A/{i}", FLASH_OFF, think=0, cost=0.001,
+            passed=i < 4, difficulty="hard")
+        add(conn, f"A/{i}", FLASH_HIGH, think=900, cost=0.01,
+            passed=i < 16, difficulty="hard")
+    for i in range(20):                       # and hurts this one, via truncation
+        add(conn, f"B/{i}", OFF, think=0, cost=0.001,
+            passed=i < 16, difficulty="hard")
+        add(conn, f"B/{i}", HIGH, think=48000, cost=0.05,
+            passed=i < 4, difficulty="hard", finish="length")
+
+    rows = analysis.within_model_effect(conn)
+    assert min(r["delta"] for r in rows) < 0 < max(r["delta"] for r in rows)
+
+    original = figures.FIGURE_DIR
+    figures.FIGURE_DIR = tmp_path / "figures"
+    try:
+        path = figures.fig_effect_by_model(conn)
+    finally:
+        figures.FIGURE_DIR = original
+    assert path.exists() and path.stat().st_size > 1000
+
+
+def test_waste_is_attributed_to_the_model_that_burned_it(conn):
+    """76% of the real waste is one model; the aggregate rate hides that."""
+    for i in range(10):                       # a model that will not terminate
+        add(conn, f"W/{i}", HIGH, think=40000, cost=0.05, passed=False,
+            difficulty="hard", finish="length")
+    for i in range(10):                       # one that finishes cleanly
+        add(conn, f"W/{i}", FLASH_HIGH, think=3000, cost=0.01, passed=True,
+            difficulty="hard")
+
+    rows = {r["model"]: r for r in analysis.waste_by_model(conn)}
+    assert len(rows) == 2
+    bad = max(rows.values(), key=lambda r: r["rate_pct"])
+    good = min(rows.values(), key=lambda r: r["rate_pct"])
+    assert bad["rate_pct"] == pytest.approx(100.0)
+    assert good["rate_pct"] == pytest.approx(0.0)
+    assert bad["wasted_usd"] > good["wasted_usd"]
+
+
+# ------------------------------- a free abort threshold, hidden by the pool
+#
+# best_threshold() returns None over the pooled roster, and the thesis reports
+# "no threshold saves money without losing a solved problem". That is a POOLED
+# statement: per model, two of five do have a free threshold.
+
+
+def test_a_free_threshold_can_exist_for_one_model_and_not_another(conn):
+    """Pooling two models with opposite profiles hides the free threshold."""
+    # Model A: everything it solved, it solved early; its long calls all failed.
+    for i in range(10):
+        add(conn, f"A/{i}", HIGH, think=1000, cost=0.01, passed=True,
+            difficulty="hard")
+        add(conn, f"A/long{i}", HIGH, think=40000, cost=0.05, passed=False,
+            difficulty="hard", finish="length")
+    # Model B: its long calls are exactly the ones that succeed.
+    for i in range(10):
+        add(conn, f"B/{i}", FLASH_HIGH, think=1000, cost=0.01, passed=False,
+            difficulty="hard")
+        add(conn, f"B/long{i}", FLASH_HIGH, think=40000, cost=0.05, passed=True,
+            difficulty="hard")
+
+    rows = {r["model"]: r for r in analysis.abort_by_model(conn)}
+    free = [m for m, r in rows.items() if r["free_threshold"] is not None]
+    costly = [m for m, r in rows.items() if r["free_threshold"] is None]
+    assert len(free) == 1 and len(costly) == 1, rows
+
+    # ...and pooled, best_threshold sees only the aggregate and reports none.
+    assert analysis.best_threshold(conn) is None, (
+        "the pooled curve must not show the free threshold that exists per model")

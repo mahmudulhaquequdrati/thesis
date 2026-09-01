@@ -125,7 +125,7 @@ this:
 |---|---|---|---|
 | **RQ0** | Can these benchmarks even tell configurations apart? | 13 | Mostly not — only 141 of 320 problems discriminate |
 | **RQ1** | Does thinking help, and where? | 14 | Yes — doubles the pass rate on hard, ~nothing on easy |
-| **RQ2** | When does thinking stop paying off? | 15 | When it runs long — 29,584 mean tokens for nothing, 15% of spend |
+| **RQ2** | When does thinking stop paying off? | 15 | When it runs long — 29,584 mean tokens for nothing, 15% of reasoning spend |
 | **RQ3** | Can you cut a call off once thinking runs long? | 16 | Yes, but not for free. **No threshold saves money without losing a solved problem** |
 | **RQ4** | What is problem-level information worth? | 17 | **13.8 accuracy points** over a problem-blind mixture |
 | **RQ4b** | Can a cheap router capture it? | 18 | **No — +0.0 points.** And the decomposition says exactly why |

@@ -33,6 +33,23 @@ That third point is not a thought experiment. You tested it end to end on
 `deepseek-v4-pro | high`: aborted at ~2,002 reasoning tokens after 33.8 seconds,
 **billed $0.000000**, where the same cell run to completion cost **$0.010978**.
 
+⚠️ **Provenance of the $0.010978 comparison figure — check before quoting.** The
+$0.00 cancellation itself is solid: verified on two providers, with no billing
+record appearing afterwards. The *comparison* baseline is weaker. The abort test
+was an exploratory call made outside the runner and never written to
+`generations`, so **$0.010978 is not reproducible from the database** — and the
+only row that carries that exact cost is `qwen3.6-35b-a3b|high` on
+`LiveCodeBench/3697` (gen 141), a different model from the `deepseek-v4-pro|high`
+the log attributes the test to. Treat "the same cell run to completion cost
+$0.010978" as an unverifiable note rather than a datum.
+
+**What to say instead**, from the stored grid and fully reproducible: a
+completed `deepseek-v4-pro|high` call costs **$0.012165 on average** (n=73, max
+$0.060253), and `kimi|high` **$0.057706** (n=23). An abort saves the whole of
+that, not a pro-rata share — which is the actual point, and it does not need the
+disputed figure.
+
+
 This matters more than it first appears. Most "save money on inference" ideas are
 *pro-rata* — you pay for what you used. This one is **free cancellation**. That
 makes an abort a genuinely different kind of control.
@@ -64,6 +81,15 @@ One day later, a check on truncation rates:
 And then the thought that unravels it:
 
 > **A censored call cannot succeed.**
+
+⚠️ Say that carefully, because it is true in two different ways and an examiner
+may separate them. In the *analysis code* it is true by construction:
+`analysis._WASTED` scores any billed, truncated call as solving nothing whatever
+the grader said, which is a deliberate choice — a response cut off mid-stream is
+not an answer you could ship. Independently of that, it is also true
+*empirically*: **zero of the 101 truncated rows produced extracted code that
+passed.** Quote the empirical version, because the definitional one cannot be
+evidence for itself.
 
 Follow the logic slowly, because it is the whole lesson:
 
@@ -124,6 +150,55 @@ is $0.89 for a *single call*), and the cost cap computes its reservation *from*
 
 That is a genuine, stated trade: **some censoring, in exchange for a cost cap
 that can exist at all.**
+
+### Act 4b — 🔴 The twist: the free threshold *does* exist, per model
+
+Found after the rest of this course was written, and it makes the story better
+rather than worse.
+
+"No threshold saves money without losing a solved problem" is a statement about
+the **pooled** roster. Split by model, it is **false for two of five**:
+
+| model | free threshold | saving | solutions kept |
+|---|---|---|---|
+| **`qwen3.5-9b`** | **10,000 tokens** | **88%** | **46 / 46** |
+| **`qwen3.6-35b-a3b`** | **16,000 tokens** | **13%** | **43 / 43** |
+| `deepseek-v4-flash` | none — every threshold costs a solution | | |
+| `deepseek-v4-pro` | none | | |
+| `kimi-k2.6` | none | | |
+
+Read `qwen3.5-9b`'s row again: **abort at 10,000 reasoning tokens, keep every
+single one of its 46 solutions, and save 88% of what it spent thinking.** That
+is exactly the free lunch the pilot claimed — and it is real. It just belongs to
+a model, not to a roster.
+
+**Why this is not luck, and how to say so.** Look at *which* models have it.
+`qwen3.5-9b` is the model whose reasoning delta is negative on three tiers of
+four (lesson 14) and which returns nothing on 37% of its thinking calls (lesson
+15). Everything it solved, it solved early; everything long was already doomed,
+so cutting the tail is free. `deepseek-v4-flash` gains **+52.9 points** on hard
+problems *by* thinking longer — cut its tail and you cut its solutions. The
+free threshold appears **exactly where reasoning was not earning its keep**, and
+vanishes exactly where it was. That is a mechanism, not a coincidence.
+
+**And notice what this does and does not do to Act 4.** It does **not** restore
+the pilot's claim: that claim was about the roster, and at roster level it is
+still false, and the 16k ceiling still manufactured part of it. What it does is
+replace a flat negative with a conditional positive:
+
+> **Whether a reasoning-length abort is free is a property of the model.** Where
+> long reasoning rarely succeeds it is free money. Where it genuinely solves
+> hard problems, every threshold costs solutions.
+
+That is a better result *and* a better story: you found a free lunch, disproved
+it, and then found the precise conditions under which it is real. Tell it in
+that order — it is the most persuasive three minutes you have.
+
+⚠️ Same caveats as the pooled curve: a simulation over completed calls, resting
+on the measured $0.00 cancellation, and a threshold chosen on this data is
+fitted unless you evaluate it on data it was not chosen on. With 46 solutions
+behind `qwen3.5-9b`'s row, say "suggestive and mechanistically explained", not
+"established".
 
 ### Act 5 — Why this is a strength
 

@@ -74,8 +74,9 @@ The three-way outcome table. Lead with the near-identity of passed (7,567) and
 failed (7,577) — that is what makes the third row (**29,584**, no answer)
 surprising.
 
-Then convert to money **immediately**: $0.56, about **15% of all spend**, bought
-nothing.
+Then convert to money **immediately**: $0.56 — **15% of everything spent on
+reasoning-enabled calls**, 11% of all spend — bought nothing. Say which
+denominator you mean; $0.56/$5.24 is 11%, and a reader with a calculator checks.
 
 Then scope the claim: non-termination is not novel (three citations); the
 economic framing is the contribution. And state that your data cannot fully
@@ -89,6 +90,12 @@ Define CPC = Σcost ÷ Σsolved. State it is a ratio estimator, therefore biased
 and bootstrapped over **problems, not calls**.
 
 The table, with intervals. **$0.00021 to $0.06320 — 305×.**
+
+Immediately qualify it, because the two ends of that range sat different exams:
+**228×** on the 22 problems those two configurations share, and **65×** across
+the six configurations measured on the identical 60 problems. Give all three in
+one sentence. An examiner who notices the n column before you mention it has
+found your weakness; one who reads you noticing it first has found your rigour.
 
 Then the sentence that earns its keep:
 

@@ -20,7 +20,7 @@ Every problem in your table falls into one of three buckets:
 
 | Bucket | Count | What it tells you about which configuration to pick |
 |---|---|---|
-| Solved by **all 10** configurations | 81 | **Nothing.** Every choice is right |
+| Solved by **every configuration that ran on it** | 81 | **Nothing.** Every choice is right |
 | Solved by **none** | 98 | **Nothing.** Every choice is wrong |
 | Solved by **some** | **141** | **Everything.** This is where choice matters |
 
@@ -30,6 +30,50 @@ information: zero. If nothing you can do changes the outcome, the outcome cannot
 guide you.
 
 **179 of 320 problems — 56% — cannot contribute to your question at all.**
+
+### 🔴 Except: read the first column of that table again
+
+It says *"solved by every configuration **that ran on it**"* — and that is doing
+much more work than it looks.
+
+**Coverage is not constant.** It runs from 2 configurations per problem to 10,
+and **206 of the 320 problems saw only two or three** — nearly always the three
+cheap `off` configs, because the run was ordered cheapest-first and stopped at
+the cost cap. Unanimity among three cheap voters is a very different claim from
+unanimity among ten.
+
+Recompute the same split at increasing coverage and the picture inverts:
+
+| coverage | n | all solved | none solved | discriminating |
+|---|---|---|---|---|
+| ≥ 1 configuration *(the 81/98/141 above)* | 320 | 81 (25%) | 98 (31%) | **141 (44%)** |
+| ≥ 1 *reasoning-enabled* configuration | 108 | 33 (31%) | 4 (4%) | **71 (66%)** |
+| ≥ 6 configurations | 73 | 11 (15%) | 2 (3%) | **60 (82%)** |
+
+The line that matters most:
+
+> **Of the 98 problems "solved by nothing", 94 were never attempted by a single
+> reasoning-enabled configuration.**
+
+They are not unsolvable. They were never shown to anything capable of solving
+them. "Nothing solved it" and "nothing was asked" produce the same row in the
+database and mean opposite things.
+
+**So separate the two claims, because one survives and one does not:**
+
+- ✅ **Per-tier saturation survives.** It is a *pass rate*, not a unanimity
+  count, so coverage does not distort it: HumanEval+, MBPP+ and LCB-easy sit at
+  **72–100% whichever effort arm you read**. Those benchmarks are genuinely too
+  easy. This is the finding.
+- ✅ **A sharper methodological point survives**, and it is worth more than the
+  original: *unanimity across few configurations measures your budget, not your
+  problems.* Any paper reporting "N% of problems are trivial" owes you its
+  coverage.
+- ❌ **"56% of problems cannot contribute" does not survive.** At real coverage
+  it is closer to 18%. Drop the claim; do not defend it.
+
+Run it yourself: `uv run python scripts/results.py`, the ⚠ COVERAGE-DEPENDENT
+block, or `carr.analysis.discrimination_by_coverage()`.
 
 ### Where it shows up per tier
 
@@ -174,13 +218,23 @@ SELECT solved_by, COUNT(*) AS n_problems FROM (
 You are deriving 81 / 98 / 141 from raw rows. Do it once and you will never
 forget where the number comes from.
 
-**3. Look at the 58× spread that started it.**
+**3. Look at the spread that started it.**
 
 ```bash
 uv run python scripts/view.py HumanEval/0
 ```
 
-Ten PASS rows. Cheapest $0.000081, dearest $0.004673. **Same outcome.**
+Ten PASS rows. **Same outcome, wildly different price.**
+
+⚠️ **You will see 44×, not 58× — and you should know why.** Today's database
+gives **$0.000106 to $0.004630**. The Day-4 figures ($0.000081 → $0.004673,
+58×) were computed at the *unpinned, cheapest-provider* prices in the roster at
+the time; providers were pinned the same week, which re-priced several models
+(`deepseek-v4-pro` went $0.870 → $1.251 per M output), and every cost was later
+reconciled against the actual bill. **58× is the historical observation; 44× is
+what reproduces.** Quote whichever you can source — and if you cite 58× in the
+thesis, say it is the pre-pinning price table. The point is untouched either
+way: ten configurations, ten passes, an order of magnitude in price.
 
 **4. Practise the framing.**
 
@@ -203,7 +257,9 @@ underneath is identical.
 <details>
 <summary>Answers</summary>
 
-1. Solved by all (81), by none (98), by some (141). The first two give the same
+1. Solved by all (81), by none (98), by some (141) — but say in the same breath
+   that the split is coverage-dependent (82% discriminate at ≥6 configurations,
+   and 94 of the 98 were never shown a reasoning config). The first two give the same
    outcome regardless of which configuration you choose, so neither can favour
    one choice over another.
 2. HumanEval+, MBPP+ and LCB easy. Any study using them for model or effort

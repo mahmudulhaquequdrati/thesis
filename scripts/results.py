@@ -51,6 +51,28 @@ def main() -> None:
             print(f"  {k:18} {buckets[k]:>4} problems"
                   + ("   <- the only useful ones" if k == "discriminating" else ""))
 
+    # ...but that split is mostly a statement about COVERAGE, not about the
+    # problems, and quoting it bare is the single easiest number here to lose in
+    # a viva. Unanimity is trivial to reach with three voters, and 206 of the 320
+    # problems saw only two or three configurations -- nearly always the cheap
+    # `off` tier. Recomputed at real coverage the picture inverts.
+    cov = analysis.discrimination_by_coverage(conn)
+    if len(cov) > 1:
+        print()
+        print("  ⚠  that split is COVERAGE-DEPENDENT -- unanimity is easy with few voters")
+        print(f"\n  {'coverage':20} {'n':>4} {'all':>8} {'none':>8} {'discriminating':>18}")
+        for r in cov:
+            mc = r["min_configs"]
+            label = (f">= {mc} configs" if isinstance(mc, int)
+                     else f">= {mc} config")
+            print(f"  {label:20} {r['n']:>4} "
+                  f"{r['all solved']:>8} {r['none solved']:>8} "
+                  f"{r['discriminating']:>10} ({r['pct_discriminating']:>4.0f}%)")
+        print("\n  Of the 98 'solved by nothing', 94 were never attempted by ANY")
+        print("  reasoning-enabled config. At >= 6 configs, 82% discriminate.")
+        print("  The per-TIER saturation above survives -- it is a pass rate, not")
+        print("  a unanimity count. The problem-level '44%' does not.")
+
     rule("RQ1  What predicts how long the model reasons?")
     print(f"  {'tier':22} {'n':>4} {'mean':>8} {'min':>8} {'max':>8}")
     for r in analysis.reasoning_by_tier(conn):
@@ -63,14 +85,87 @@ def main() -> None:
         print(f"  {r['outcome']:22} {r['n']:>4} {r['avg_reasoning'] or 0:>15.0f} "
               f"${r['total_usd'] or 0:>10.6f}")
 
+    # ...and 76% of that waste is a single model, so the aggregate rate is a
+    # misleading thing to hand a practitioner.
+    wbm = analysis.waste_by_model(conn)
+    if wbm:
+        print(f"\n  {'wasted by model':28} {'wasted/calls':>13} {'rate':>7} "
+              f"{'mean rtok':>10} {'$ wasted':>10}")
+        for r in wbm:
+            rt = f"{r['avg_reasoning']:.0f}" if r["avg_reasoning"] else "-"
+            print(f"  {r['model'].split('/')[1][:28]:28} "
+                  f"{r['wasted']:>6}/{r['n']:<6} {r['rate_pct']:>6.1f}% "
+                  f"{rt:>10} {r['wasted_usd']:>10.6f}")
+        print("\n  Non-termination is a property of the small model, not of")
+        print("  reasoning: expect ~a third of qwen3.5-9b's thinking calls to")
+        print("  return nothing, against ~1 in 25 of deepseek-v4-flash's.")
+
     cens = analysis.censoring(conn)
     if cens:
         rule("⚠  CENSORING — calls stopped at max_tokens, true length unknown")
-        print("  A censored call CANNOT have succeeded, so this biases the abort")
+        print("  A censored call is SCORED as solving nothing (by definition --")
+        print("  see analysis._WASTED), and empirically none of the 101 truncated")
+        print("  rows produced code that passed either. So this biases the abort")
         print("  curve against long reasoning. Raise max_tokens if it is material.")
         print(f"\n  {'tier':22} {'n':>4} {'censored':>9} {'pct':>6}")
         for r in cens:
             print(f"  {r['tier']:22} {r['n']:>4} {r['censored']:>9} {r['pct']:>5}%")
+
+    # --------------------------------------- the effect, per model, not per tier
+    #
+    # The aggregate off-vs-on rows above average over models that respond to
+    # reasoning in OPPOSITE directions, so they are the wrong headline. Printed
+    # before the style confound because this one reverses a sign, not a margin.
+    wm = analysis.within_model_effect(conn)
+    if wm:
+        rule("⚠  THE EFFECT IS PER MODEL, NOT PER TIER — the aggregate hides a reversal")
+        print(f"  {'tier':14} {'model':18} {'off':>14} {'high':>14} "
+              f"{'delta':>7} {'cens':>6} {'rtok':>7}")
+        for r in wm:
+            print(f"  {r['tier']:14} {r['model'].split('/')[1][:18]:18} "
+                  f"{r['off_pct']:>7.1f}% n={r['off_n']:<4} "
+                  f"{r['high_pct']:>7.1f}% n={r['high_n']:<4} "
+                  f"{r['delta']:>+7.1f} {r['censored_pct']:>5.0f}% {r['avg_reasoning']:>7.0f}")
+        print("\n  'cens' = share of the thinking arm stopped at max_tokens, which")
+        print("  cannot succeed. It separates the two failure modes:")
+        print("    NON-TERMINATION  qwen3.5-9b|high censors 81% on hard -- its")
+        print("      negative delta is mostly the model failing to stop.")
+        print("    REAL DEGRADATION qwen3.5-9b|high censors 0% on MBPP+, reasons")
+        print("      368 tokens, terminates, and still loses 24 points on the")
+        print("      SAME problems. That one is not measurement.")
+
+    # ------------------------------------------------- the style confound
+    #
+    # The raw off-vs-on gap above is not a like-for-like comparison on the hard
+    # tier: the two arms sat different exams. See analysis.style_composition
+    # for the mechanism (it is the runner's problem_id tiebreak, not a design
+    # choice). Printed here, immediately under the headline it qualifies.
+    comp = analysis.style_composition(conn)
+    if comp:
+        rule("⚠  STYLE CONFOUND — the two effort arms did not sit the same exam")
+        print("  LiveCodeBench ships stdin→stdout (AtCoder) and Solution-class")
+        print("  (LeetCode) problems. Run order sorts on problem_id, and numeric")
+        print("  LeetCode ids sort before letter-prefixed AtCoder ids, so the")
+        print("  expensive thinking arm stopped at the cap inside the LeetCode")
+        print("  prefix. Compare WITHIN a style, never across.")
+        print(f"\n  {'tier':8} {'style':11} {'effort':7} {'n':>5} {'passed':>7} {'pct':>7}")
+        for r in comp:
+            print(f"  {r['tier']:8} {r['style']:11} {r['effort']:7} "
+                  f"{r['n']:>5} {r['passed']:>7} {r['pct']:>6}%")
+
+        matched = analysis.style_matched_effect(conn)
+        if matched:
+            print(f"\n  {'the honest effect of reasoning, within one style':60}")
+            print(f"  {'tier':8} {'style':11} {'off':>16} {'on':>16} "
+                  f"{'matched':>9} {'raw':>8}")
+            for m in matched:
+                print(f"  {m['tier']:8} {m['style']:11} "
+                      f"{m['off_pct']:>10.1f}% n={m['off_n']:<3} "
+                      f"{m['high_pct']:>10.1f}% n={m['high_n']:<3} "
+                      f"{m['matched_gap']:>+8.1f} {m['raw_gap']:>+7.1f}")
+            print("\n  'raw' is the confounded tier-level gap reported above.")
+            print("  Arms with n < 30 are dropped: hard/stdin thinking is n=8.")
+            print("  Quote the MATCHED column, with its style named.")
 
     # ---------------------------------------------------------- economics
     seed = load_experiment().seed
@@ -107,6 +202,48 @@ def main() -> None:
             for a, b in overlaps[:4]:
                 print(f"    {a['model_slug']}|{a['effort_label']} vs "
                       f"{b['model_slug']}|{b['effort_label']}")
+
+        # ------------------------------------------- is that spread like-for-like?
+        #
+        # It is NOT, and the headline must not be quoted without this.
+        #
+        # `paired_problems` guarantees each row's problems have both effort arms
+        # graded; it does NOT guarantee two rows share the same problems. Coverage
+        # inside the paired set still runs from n=16 to n=107, and the tier mix
+        # differs sharply with it -- deepseek-v4-pro|off, for instance, sits mostly
+        # on the easy benchmarks. So the cheapest and dearest rows were measured on
+        # DIFFERENT exams, and their ratio mixes a price difference with a
+        # difficulty difference.
+        #
+        # Two honest re-computations, both printed so the caveat cannot be lost:
+        # the same two configs over the problems they actually share, and the whole
+        # spread over the largest set where every config sat the identical exam.
+        shared = analysis.common_problems(
+            conn, [best["config_id"], worst["config_id"]])
+        if shared:
+            pair = {r["config_id"]: r for r in
+                    analysis.cost_per_correct(conn, shared, seed=seed,
+                                              n_resamples=1500)}
+            lo, hi = pair.get(best["config_id"]), pair.get(worst["config_id"])
+            if lo and hi and lo["cpc_usd"] and hi["cpc_usd"]:
+                print(f"\n  ^ NOT like-for-like: those two rows rest on "
+                      f"n={best['n_problems']} and n={worst['n_problems']} "
+                      f"DIFFERENT problems.")
+                print(f"    On the {len(shared)} problems they actually share, the "
+                      f"ratio is {hi['cpc_usd'] / lo['cpc_usd']:.0f}x "
+                      f"(${lo['cpc_usd']:.5f} vs ${hi['cpc_usd']:.5f}).")
+
+        like_cfgs, like_probs = analysis.frontier_subset(conn, min_problems=50)
+        if len(like_cfgs) >= 3:
+            like = [r for r in analysis.cost_per_correct(
+                conn, like_probs, seed=seed, n_resamples=1500)
+                if r["config_id"] in set(like_cfgs) and r["cpc_usd"]]
+            if len(like) >= 2:
+                print(f"    Over the strictest set -- {len(like_cfgs)} configs on "
+                      f"the SAME {len(like_probs)} problems -- the full spread is "
+                      f"{like[-1]['cpc_usd'] / like[0]['cpc_usd']:.0f}x.")
+                print("    All three are large; quote whichever you can name the "
+                      "denominator for.")
 
     # ------------------------------------------------ frontier and its hull
     cfg_ids, front_probs = analysis.frontier_subset(conn, min_problems=50)
@@ -210,6 +347,25 @@ def main() -> None:
               f"cuts thinking spend {best.saved_pct:.0f}%")
     else:
         print("  No threshold saves money without losing a solved problem.")
+
+    # ...but that is a POOLED statement, and it is false for two of the five
+    # models. Printed right after, because the aggregate alone gives a
+    # practitioner the wrong rule.
+    abm = analysis.abort_by_model(conn)
+    if abm:
+        print(f"\n  {'per model -- the pool hides a free threshold':58}")
+        print(f"  {'model':24} {'calls':>6} {'solved':>7}   {'free threshold':<34}")
+        for r in abm:
+            free = (f"T={r['free_threshold']:,} saves {r['free_saving_pct']:.0f}%"
+                    if r["free_threshold"] else "none -- every T costs a solution")
+            print(f"  {r['model'].split('/')[1][:24]:24} {r['n_calls']:>6} "
+                  f"{r['solved']:>7}   {free:<34}")
+        print("\n  The free threshold exists exactly where reasoning was NOT")
+        print("  earning its keep: qwen3.5-9b's delta is negative on three tiers")
+        print("  and 37% of its thinking calls return nothing, so whatever it")
+        print("  solved it solved early. flash gains +52.9 points on hard by")
+        print("  thinking longer, so cutting it off must cost solutions.")
+
     print("\n  Caveat: simulated over completed calls, and the threshold must be"
           "\n  chosen on data it is not then evaluated against.\n")
     conn.close()

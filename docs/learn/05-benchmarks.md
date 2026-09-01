@@ -87,7 +87,14 @@ buggy solutions passed. **EvalPlus** added far more tests (roughly 80× for
 HumanEval). Using the `+` versions means a passing answer really works, rather
 than merely surviving three examples.
 
-Note also: MBPP+ has **378** problems, not the 500 people quote. EvalPlus dropped
+Note also: MBPP+ has **378** problems, not the 500 people quote — and the usual
+explanation for that is wrong, so check it before repeating it. The 378 span
+task ids **2 to 809**; only **224** sit inside the canonical 11–510 test split
+and **154** sit outside. So MBPP+ is not "the 500 minus broken ones" — it is a
+filtered, test-augmented set drawn from a wider range than the split people
+quote. (Verify with:
+`SELECT COUNT(*) FROM problems WHERE benchmark='mbpp_plus' AND CAST(REPLACE(problem_id,'Mbpp/','') AS INTEGER) > 510;`
+→ 147.) EvalPlus dropped
 broken ones. Your proposal said 500; that is one of the 14 `.docx` edits owed.
 
 ### Why LiveCodeBench had to exist in your design

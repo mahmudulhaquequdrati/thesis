@@ -46,7 +46,7 @@ Three rules:
 **3. Isn't it obvious that thinking helps on hard problems?**
 > The direction was contradicted by my own pilot. The finding is the sharpness of
 > the condition — +29 points on hard, +1.0 on MBPP+ — and the fact that 15% of
-> spend buys nothing at all. And the benchmarks the field uses cannot show it:
+> reasoning spend buys nothing at all. And the benchmarks the field uses cannot show it:
 > 179 of my 320 problems cannot distinguish any configuration from another.
 
 **4. Your proposal was about a router. What happened?**
@@ -70,8 +70,9 @@ Three rules:
 **7. How do you know your pass/fail labels are right?**
 > Grading is in one file wrapping EvalPlus's own checker, because pass/fail is not
 > `==` — floats need a tolerance and some problems have bespoke oracles. The
-> harness is validated against the benchmarks' canonical solutions: 210 of them,
-> all passing. That check caught a macOS bug that was silently failing *every*
+> harness is validated against the benchmarks' canonical solutions — three in the
+> standing suite today, and a one-off sweep of 210 across both benchmarks, all
+> passing, whose fixture was then retired. That check caught a macOS bug that was silently failing *every*
 > solution.
 
 **8. Your grid is unbalanced. Isn't that fatal?**
@@ -154,7 +155,7 @@ Three rules:
 
 **19. What should someone reading this do differently tomorrow?**
 > Practitioner: enable reasoning on hard problems, leave it off elsewhere, expect
-> ~15% of spend to buy nothing, and abort at 16k if they will trade 12% of
+> ~15% of reasoning spend to buy nothing, and abort at 16k if they will trade 12% of
 > solutions for half the cost. Researcher: pin the provider and quantization,
 > report truncation rates, and state which subset of their benchmark carries
 > signal.
@@ -174,7 +175,8 @@ Three rules:
 Do not get defensive; separate the claims.
 
 > The large effects are robust to the sample size — a 29-point pass-rate gap and
-> a 305× cost spread are not fragile at n = 107. The fine-grained orderings are
+> a cost spread of 65× on an identical exam — 305× across the roster — are not
+> fragile at n = 107. The fine-grained orderings are
 > not: five adjacent CPC pairs have overlapping intervals and I say so explicitly.
 > Directions are established; individual orderings often are not, and I mark which
 > is which.
@@ -183,16 +185,19 @@ Do not get defensive; separate the claims.
 
 > The engineering is the instrument. The research is what it measured: that the
 > value of reasoning is conditional on difficulty, that most standard benchmark
-> problems cannot detect the difference, that 15% of spend returns nothing, and
+> problems cannot detect the difference, that 15% of reasoning spend returns nothing, and
 > that the platform silently substitutes models and ignores its own parameters. And
 > one of my own claims was refuted by my better data, which I report.
 
 **"Why should I believe any of these numbers?"**
 
 > Because they are reproducible. Fixed seeds throughout — running the analysis
-> twice produces byte-identical output. Every call priced from the actual bill,
+> twice produces byte-identical output. Costs measured from token counts against
+> the pinned endpoint's price, with the pilot's 139 calls reconciled against the
+> actual bill,
 > not an estimate, with both stored so drift is visible. Grading validated against
-> 210 canonical solutions. 119 tests, of which the largest group covers the cost
+> canonical solutions — 3 in the suite, 210 in a retired sweep. 132 tests, of
+> which the largest group covers the cost
 > cap and never paying twice. And the raw responses are stored verbatim, so
 > anything can be re-graded without re-purchasing.
 

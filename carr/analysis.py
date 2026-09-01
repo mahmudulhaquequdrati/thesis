@@ -9,13 +9,34 @@ Four things, matching the reframed research questions:
 
 `abort_curve` is the headline deliverable. It is a simulation over completed
 calls, and it relies on one measured fact: **aborting a stream mid-reasoning is
-billed $0.00** (verified 2026-07-26 on two providers, against $0.010978 for the
-same cell run to completion). So an aborted call is scored as costing nothing
-and solving nothing -- not as a pro-rata saving.
+billed $0.00** (verified 2026-07-26 on two providers). So an aborted call is
+scored as costing nothing and solving nothing -- not as a pro-rata saving.
+
+The often-quoted "$0.010978 for the same cell run to completion" is NOT
+reproducible from this database: the abort test was an exploratory call made
+outside the runner and never stored, and the only row carrying that exact cost
+is qwen3.6-35b-a3b|high on LiveCodeBench/3697, a different model from the one
+the log attributes the test to. Use the stored grid instead -- a completed
+deepseek-v4-pro|high call averages $0.012165 (n=73), kimi|high $0.057706 (n=23)
+-- which makes the same point and is checkable.
 
 Everything filters `is_mock = 0` and prefers `cost_actual_usd` over
 `cost_computed_usd`, because the price table was wrong by 1.54x before
 providers were pinned and only the billed number is trustworthy.
+
+⚠️ But know how far that preference actually reaches: `cost_actual_usd` is
+populated on **139 of 1,373 rows, all of them the 2026-07-25 pilot**. The
+1,224-call grid was never reconciled, so in practice almost every dollar these
+functions return is `cost_computed_usd` -- token counts times the price table.
+That is defensible because the grid pins one provider per model with
+`allow_fallbacks: false`, making the endpoint's price contractual rather than a
+routing lottery; it is not the same as having checked. On the 139 rows where it
+could be checked, billed ran 1.354x computed (2.16-2.51x on deepseek-v4-pro),
+which is evidence for the pinning finding rather than against the grid, since
+the pilot pre-dates pinning.
+
+`runner.reconcile_costs()` can still close this: 1,207 of the 1,224 grid rows
+carry an `openrouter_gen_id` and `GET /generation` is free.
 """
 
 from __future__ import annotations
@@ -42,8 +63,41 @@ _REAL = "COALESCE(g.is_mock, 0) = 0"
 # So: billed and no usable answer = wasted. Not billed = infrastructure, and it
 # is excluded from every rate rather than silently scored as a failure.
 _INFRA = f"(g.error IS NOT NULL AND COALESCE({_COST}, 0) <= 0)"
+
+# "Wasted" means BILLED AND NO USABLE ANSWER.
+#
+# ⚠️ Note what this does NOT depend on: the grader. A billed row with
+# finish_reason='length' is scored as solving nothing *whatever `passed` says*,
+# which is a deliberate decision (see
+# tests/test_analysis.py::test_a_truncated_call_is_never_counted_as_a_pass) and
+# is coherent with the abort simulation, where an aborted call also solves
+# nothing. A response cut off mid-stream is not an answer you could ship.
+#
+# ⚠️ But it has a consequence for how the result may be WORDED. "A censored call
+# cannot have succeeded" is true here partly by construction, so it is not
+# evidence about the models on its own. The independent, empirical version is:
+#
+#     ZERO of the 101 truncated rows produced extracted code that passed.
+#     (Checked 2026-09-01: billed AND truncated-or-errored AND passed = 0 rows.)
+#
+# Quote that sentence, not the definitional one. Re-check it whenever new rows
+# land, because the two statements will stop agreeing the moment a truncated
+# response closes its code fence in time -- extract.py deliberately accepts an
+# unterminated fence, so such a row is gradeable and would then be scored 0 here
+# while the grader says 1.
 _WASTED = (f"(COALESCE({_COST}, 0) > 0 "
            f"AND (g.finish_reason = 'length' OR g.error IS NOT NULL))")
+
+# LiveCodeBench ships two kinds of problem and they are not equally hard for a
+# model: AtCoder tasks are stdin->stdout programs, LeetCode tasks are a method
+# body to fill in on a `Solution` class. Only the second has an entry point.
+#
+# This is a CONFOUND, not a curiosity, because coverage of the two is wildly
+# uneven -- see style_composition(). Reported next to every tier so the effect
+# of reasoning can never again be read off arms that sat different exams.
+_STYLE = ("CASE WHEN p.benchmark != 'livecodebench' THEN 'n/a' "
+          "WHEN p.entry_point IS NULL OR p.entry_point = '' THEN 'stdin' "
+          "ELSE 'functional' END")
 
 
 def saturation(conn) -> list[dict]:
@@ -69,12 +123,19 @@ def saturation(conn) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def discriminating_problems(conn) -> dict[str, int]:
+def discriminating_problems(conn, min_configs: int = 1) -> dict[str, int]:
     """How many problems actually carry a signal.
 
     A problem every config solves, and a problem none solves, are equally
     useless: neither can distinguish a good decision from a bad one. Only
     problems where configs DISAGREE contribute anything.
+
+    ⚠️ `min_configs` is not a convenience knob -- READ discrimination_by_coverage
+    before quoting this. Unanimity is trivially easier to reach with fewer
+    voters, and coverage here runs from 2 cells to 10: 206 of 320 problems saw
+    only 2-3 configurations, nearly always the three cheap `off` ones. Counting
+    those beside the 73 problems that saw six or more mixes a property of the
+    problems with a property of the budget.
     """
     rows = conn.execute(f"""
         WITH per_problem AS (
@@ -85,14 +146,89 @@ def discriminating_problems(conn) -> dict[str, int]:
             LEFT JOIN results r ON r.gen_id = g.gen_id
             WHERE {_REAL} AND NOT {_INFRA}
             GROUP BY g.problem_id
+            HAVING COUNT(*) >= ?
         )
         SELECT CASE WHEN n_pass = 0        THEN 'none solved'
                     WHEN n_pass = n_cells  THEN 'all solved'
                     ELSE 'discriminating' END AS bucket,
                COUNT(*) AS n
         FROM per_problem GROUP BY bucket
-    """).fetchall()
+    """, (min_configs,)).fetchall()
     return {r["bucket"]: r["n"] for r in rows}
+
+
+def discrimination_by_coverage(conn,
+                               cuts: tuple[int, ...] = (1, 4, 6)) -> list[dict]:
+    """The same split, recomputed at increasing coverage. The honest version.
+
+    ⚠️ The headline "only 141 of 320 problems discriminate" is substantially a
+    COVERAGE artefact, and this is the function that says so.
+
+    A problem is called unanimous when every configuration that ran on it agreed.
+    With ten configurations that is a real statement about the problem. With
+    three -- all of them the cheap no-reasoning tier, which is what 206 of the
+    320 problems got -- it mostly says nobody capable was asked.
+
+    Measured:
+
+        coverage            n     all-solved   none-solved   discriminating
+        >= 1 config       320      81 (25%)      98 (31%)       141 (44%)
+        >= 1 thinking     108      33 (31%)       4 ( 4%)        71 (66%)
+        >= 6 configs       73      11 (15%)       2 ( 3%)        60 (82%)
+
+    So of the 98 problems "solved by nothing", **94 were never attempted by a
+    single reasoning-enabled configuration** -- they saw only the three cheap
+    `off` configs. Read at proper coverage the picture inverts: on the problems
+    actually measured across six or more configurations, **82% discriminate**.
+
+    What survives unchanged is the per-TIER saturation result, because that is a
+    pass rate rather than a unanimity count: HumanEval+, MBPP+ and LCB-easy sit
+    at 72-100% whichever effort arm you read. The easy benchmarks really are
+    saturated. What does not survive is the problem-level claim that three
+    quarters of the pool carries no signal.
+    """
+    out = []
+    for cut in cuts:
+        counts = discriminating_problems(conn, min_configs=cut)
+        n = sum(counts.values())
+        out.append({
+            "min_configs": cut, "n": n,
+            "all solved": counts.get("all solved", 0),
+            "none solved": counts.get("none solved", 0),
+            "discriminating": counts.get("discriminating", 0),
+            "pct_discriminating": 100.0 * counts.get("discriminating", 0) / n if n else 0.0,
+        })
+
+    # The cut that matters most is not a cell count but whether anything capable
+    # ran at all, so report it explicitly rather than leaving it to be inferred.
+    rows = conn.execute(f"""
+        WITH per_problem AS (
+            SELECT g.problem_id,
+                   SUM(COALESCE(r.passed, 0)) AS n_pass,
+                   COUNT(*) AS n_cells,
+                   SUM(CASE WHEN c.effort_label != 'off' THEN 1 ELSE 0 END) AS n_think
+            FROM generations g
+            JOIN configs c ON c.config_id = g.config_id
+            LEFT JOIN results r ON r.gen_id = g.gen_id
+            WHERE {_REAL} AND NOT {_INFRA}
+            GROUP BY g.problem_id
+        )
+        SELECT CASE WHEN n_pass = 0       THEN 'none solved'
+                    WHEN n_pass = n_cells THEN 'all solved'
+                    ELSE 'discriminating' END AS bucket,
+               COUNT(*) AS n
+        FROM per_problem WHERE n_think >= 1 GROUP BY bucket
+    """).fetchall()
+    counts = {r["bucket"]: r["n"] for r in rows}
+    n = sum(counts.values())
+    out.insert(1, {
+        "min_configs": "1 thinking", "n": n,
+        "all solved": counts.get("all solved", 0),
+        "none solved": counts.get("none solved", 0),
+        "discriminating": counts.get("discriminating", 0),
+        "pct_discriminating": 100.0 * counts.get("discriminating", 0) / n if n else 0.0,
+    })
+    return out
 
 
 def reasoning_by_tier(conn) -> list[dict]:
@@ -218,6 +354,80 @@ def best_threshold(conn) -> AbortPoint | None:
     return min(curve, key=lambda p: p.cost_usd) if curve else None
 
 
+def abort_by_model(conn, thresholds=(2000, 4000, 6000, 8000, 10000,
+                                     12000, 16000, 20000, 24000, 32000)) -> list[dict]:
+    """The abort tradeoff per MODEL, and the free threshold the pool hides.
+
+    ⚠️ `best_threshold()` returns None, and the thesis reports "no threshold
+    saves money without losing a solved problem". That is true of the **pooled**
+    roster and FALSE for two of the five models taken individually:
+
+        model               free threshold      saving   solutions kept
+        qwen3.5-9b          10,000 tokens        88%      46/46
+        qwen3.6-35b-a3b     16,000 tokens        13%      43/43
+        deepseek-v4-flash   none -- every threshold costs a solution
+        deepseek-v4-pro     none
+        kimi-k2.6           none
+
+    And the pattern is coherent rather than noise: **the free threshold exists
+    exactly where reasoning was not earning its keep.** qwen3.5-9b is the model
+    whose reasoning delta is negative on three tiers of four
+    (within_model_effect) and which wastes 37% of its thinking calls
+    (waste_by_model) -- so everything it solved, it solved early, and everything
+    long was already doomed. deepseek-v4-flash gains +52.9 points on hard
+    problems by thinking longer, so cutting it off necessarily costs solutions.
+
+    This refines the refuted pilot claim rather than restoring it. The pilot said
+    a free threshold existed *for the roster*; that remains false, and the 16k
+    ceiling really did manufacture part of it. What is true is narrower and more
+    useful:
+
+        Whether a reasoning-length abort is free is a property of the model.
+        Where long reasoning rarely succeeds it is free money -- 88% of
+        qwen3.5-9b's thinking spend, losing nothing. Where long reasoning
+        genuinely solves hard problems, every threshold costs solutions.
+
+    `free_threshold` is the cheapest threshold keeping EVERY solved problem, or
+    None. Same simulation and the same caveats as abort_curve(): it runs over
+    completed calls, it relies on the measured $0.00 cancellation, and a
+    threshold chosen here is fitted unless it is evaluated on held-out data.
+    """
+    rows = conn.execute(f"""
+        SELECT c.model_slug AS model,
+               COALESCE(g.reasoning_tokens, 0) AS think,
+               {_COST} AS cost,
+               CASE WHEN {_WASTED} THEN 0 ELSE COALESCE(r.passed, 0) END AS ok
+        FROM generations g
+        JOIN configs c ON c.config_id = g.config_id
+        LEFT JOIN results r ON r.gen_id = g.gen_id
+        WHERE {_REAL} AND NOT {_INFRA} AND c.effort_label != 'off'
+    """).fetchall()
+
+    by_model: dict[str, list] = {}
+    for r in rows:
+        by_model.setdefault(r["model"], []).append(r)
+
+    out = []
+    for model, rs in by_model.items():
+        total = sum(r["ok"] for r in rs)
+        baseline = sum(r["cost"] or 0 for r in rs)
+        free_t = free_saving = None
+        for t in thresholds:
+            kept = sum(r["ok"] for r in rs if r["think"] <= t)
+            cost = sum(r["cost"] or 0 for r in rs if r["think"] <= t)
+            if kept == total and cost < baseline:
+                free_t = t
+                free_saving = 100.0 * (1 - cost / baseline) if baseline else 0.0
+                break
+        out.append({
+            "model": model, "n_calls": len(rs), "solved": total,
+            "baseline_usd": baseline,
+            "free_threshold": free_t, "free_saving_pct": free_saving,
+        })
+    out.sort(key=lambda r: (r["free_threshold"] is None, -(r["free_saving_pct"] or 0)))
+    return out
+
+
 def summary(conn) -> dict:
     return {
         "saturation": saturation(conn),
@@ -261,10 +471,227 @@ def censoring(conn, max_tokens: int | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def style_composition(conn, tiers: tuple[str, ...] = ("hard", "medium")) -> list[dict]:
+    """Pass rate per (tier, LiveCodeBench style, effort). The matched comparison.
+
+    ⚠️ This exists because the headline effort comparison is CONFOUNDED BY
+    PROBLEM STYLE, and the cause is mechanical rather than scientific.
+
+    `runner.plan` orders cells by `(expected_usd, problem_id)`. Within one
+    config every cell has the same expected cost, so the tiebreak is the problem
+    id -- as a STRING. LiveCodeBench's LeetCode ids are numeric
+    ("LiveCodeBench/3487") and its AtCoder ids start with letters
+    ("LiveCodeBench/abc374_a"), and digits sort before letters in ASCII. So all
+    125 functional problems ran before any of the 217 stdin ones, and the
+    expensive thinking arm -- which runs last under cheapest-first -- stopped at
+    the cost cap while still inside the functional prefix.
+
+    The result is that the two effort arms sat different exams on the hard tier:
+    the `off` arm is 348 stdin / 114 functional, the `high` arm is 8 / 110. And
+    the styles are not equally hard, so a raw off-vs-on difference on that tier
+    mixes a reasoning effect with a composition effect.
+
+    Restricting to one style is the honest comparison, and it is free -- a
+    re-analysis of rows already bought, not a re-purchase. It costs the raw hard
+    gap about 3.6 points (29.3 -> 25.7) and it makes the medium gap LARGER
+    (23.1 -> 28.9), so the finding survives; the raw pair simply overstates it
+    on one tier and understates it on the other.
+
+    Every set derived from the frontier subset inherits this too: those 60
+    problems are 51 functional and 2 stdin, so the frontier, hull, oracle and
+    router numbers describe function-style problems, not the hard tier at large.
+    """
+    marks = ",".join("?" * len(tiers))
+    rows = conn.execute(f"""
+        SELECT COALESCE(p.difficulty, p.benchmark) AS tier,
+               {_STYLE} AS style,
+               c.effort_label AS effort,
+               COUNT(*) AS n,
+               SUM(COALESCE(r.passed, 0)) AS passed,
+               ROUND(100.0 * SUM(COALESCE(r.passed, 0)) / COUNT(*), 1) AS pct
+        FROM generations g
+        JOIN configs c  ON c.config_id = g.config_id
+        JOIN problems p ON p.problem_id = g.problem_id
+        LEFT JOIN results r ON r.gen_id = g.gen_id
+        WHERE {_REAL} AND NOT {_INFRA}
+          AND COALESCE(p.difficulty, '') IN ({marks})
+        GROUP BY tier, style, effort
+        ORDER BY tier, style, effort
+    """, list(tiers)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def style_matched_effect(conn, min_n: int = 30) -> list[dict]:
+    """The off-vs-on gap within a single style, beside the confounded raw gap.
+
+    `min_n` drops arms too thin to compare -- the hard/stdin thinking arm is
+    n=8, which supports nothing and would otherwise print a 12.5% that reads
+    like a finding.
+    """
+    comp = style_composition(conn)
+    by: dict[tuple[str, str], dict[str, dict]] = {}
+    for r in comp:
+        by.setdefault((r["tier"], r["style"]), {})[r["effort"]] = r
+
+    raw: dict[str, dict[str, list[dict]]] = {}
+    for r in comp:
+        raw.setdefault(r["tier"], {}).setdefault(r["effort"], []).append(r)
+
+    out = []
+    for (tier, style), arms in sorted(by.items()):
+        off, high = arms.get("off"), arms.get("high")
+        if not off or not high or off["n"] < min_n or high["n"] < min_n:
+            continue
+        rows = raw[tier]
+        raw_off = sum(x["passed"] for x in rows.get("off", []))
+        raw_off_n = sum(x["n"] for x in rows.get("off", []))
+        raw_hi = sum(x["passed"] for x in rows.get("high", []))
+        raw_hi_n = sum(x["n"] for x in rows.get("high", []))
+        out.append({
+            "tier": tier, "style": style,
+            "off_pct": off["pct"], "off_n": off["n"],
+            "high_pct": high["pct"], "high_n": high["n"],
+            "matched_gap": high["pct"] - off["pct"],
+            "raw_off_pct": 100.0 * raw_off / raw_off_n if raw_off_n else 0.0,
+            "raw_high_pct": 100.0 * raw_hi / raw_hi_n if raw_hi_n else 0.0,
+            "raw_gap": ((100.0 * raw_hi / raw_hi_n) if raw_hi_n else 0.0)
+                       - ((100.0 * raw_off / raw_off_n) if raw_off_n else 0.0),
+        })
+    return out
+
+
+def waste_by_model(conn) -> list[dict]:
+    """Which model burned the money that bought nothing. RQ2, disaggregated.
+
+    ⚠️ "15% of reasoning spend bought no answer" is a real number and a
+    misleading headline, because the waste is not spread across the roster:
+
+        model               wasted / thinking calls    rate    mean reasoning
+        qwen3.5-9b                    37 / 99          37.4%      30,411
+        qwen3.6-35b-a3b                7 / 74           9.5%      16,635
+        deepseek-v4-flash              3 / 73           4.1%      48,000
+        deepseek-v4-pro                2 / 72           2.8%      31,999
+        kimi-k2.6                      0 / 22           0.0%           -
+
+    **76% of the wasted calls are one model.** Non-termination is a property of
+    the small model rather than of reasoning in general, which is the same story
+    within_model_effect() tells about the sign reversal -- and it makes the
+    practitioner advice far more useful: *expect roughly a third of a small
+    model's thinking calls to return nothing, and about one in twenty-five of a
+    capable one's.*
+    """
+    rows = conn.execute(f"""
+        SELECT c.model_slug AS model,
+               COUNT(*) AS n,
+               SUM(CASE WHEN {_WASTED} THEN 1 ELSE 0 END) AS wasted,
+               ROUND(AVG(CASE WHEN {_WASTED} THEN g.reasoning_tokens END)) AS avg_reasoning,
+               ROUND(SUM(CASE WHEN {_WASTED} THEN {_COST} ELSE 0 END), 6) AS wasted_usd,
+               ROUND(SUM({_COST}), 6) AS total_usd
+        FROM generations g
+        JOIN configs c ON c.config_id = g.config_id
+        LEFT JOIN results r ON r.gen_id = g.gen_id
+        WHERE {_REAL} AND NOT {_INFRA} AND c.effort_label != 'off'
+        GROUP BY model
+        ORDER BY 1.0 * SUM(CASE WHEN {_WASTED} THEN 1 ELSE 0 END) / COUNT(*) DESC
+    """).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["rate_pct"] = 100.0 * r["wasted"] / r["n"] if r["n"] else 0.0
+        out.append(d)
+    return out
+
+
+def within_model_effect(conn, min_n: int = 15) -> list[dict]:
+    """The effect of reasoning per (tier, MODEL), with censoring attached.
+
+    ⚠️ This is the table the results chapter should lead with, because the
+    aggregate off-vs-on comparison averages over models whose responses to
+    reasoning point in OPPOSITE directions.
+
+    Measured:
+
+        tier       model               off            high          delta
+        hard       deepseek-v4-flash   29.2% n=154    82.1% n=28    +52.9
+        hard       qwen3.6-35b-a3b     22.1% n=154    27.6% n=29     +5.5
+        hard       qwen3.5-9b          22.1% n=145     3.8% n=26    -18.2
+        medium     deepseek-v4-flash   62.5% n=104    94.4% n=36    +31.9
+        medium     qwen3.6-35b-a3b     52.9% n=104    72.2% n=36    +19.3
+        medium     qwen3.5-9b          43.6% n=101    38.7% n=31     -4.9
+        mbpp_plus  qwen3.5-9b          80.0% n=20     55.6% n=18    -24.4
+        humaneval  qwen3.5-9b          90.5% n=21     94.7% n=19     +4.3
+
+    So the headline "+29.3 points on hard" is an average over **+52.9 on one
+    model and -18.2 on another**. Reasoning is not a property of the tier; it is
+    a property of the (model, tier) pair.
+
+    `censored_pct` and `nocode_pct` are carried on every row because they
+    separate the two failure modes, and the separation is the finding:
+
+    * **Non-termination.** `qwen3.5-9b|high` hits the 48,000-token ceiling on
+      **81% of hard calls** and returns no code at all on 77%, averaging 24,826
+      reasoning tokens. Its -18.2 is mostly the model failing to stop, not the
+      model reasoning badly. `deepseek-v4-flash|high` censors at 11% on the same
+      tier. A ceiling censors the small model far harder than the large one, so
+      "reasoning hurts small models on hard problems" is partly a statement
+      about our ceiling.
+
+    * **Genuine degradation.** On MBPP+, `qwen3.5-9b|high` censors **0%**,
+      reasons for a mean of 368 tokens, terminates normally, and still drops
+      from 16/20 to 10/18 on the SAME problems. Every failure produced extracted
+      code and failed on assertions. That one is not measurement: enabling
+      reasoning made an easy problem harder for it.
+
+    Both matter, and they need different sentences in the write-up.
+    """
+    rows = conn.execute(f"""
+        SELECT COALESCE(p.difficulty, p.benchmark) AS tier,
+               c.model_slug AS model,
+               c.effort_label AS effort,
+               COUNT(*) AS n,
+               SUM(COALESCE(r.passed, 0)) AS passed,
+               SUM(CASE WHEN g.finish_reason = 'length' THEN 1 ELSE 0 END) AS censored,
+               SUM(CASE WHEN LENGTH(COALESCE(g.extracted_code, '')) = 0
+                        THEN 1 ELSE 0 END) AS nocode,
+               ROUND(AVG(COALESCE(g.reasoning_tokens, 0))) AS avg_reasoning
+        FROM generations g
+        JOIN configs c  ON c.config_id = g.config_id
+        JOIN problems p ON p.problem_id = g.problem_id
+        LEFT JOIN results r ON r.gen_id = g.gen_id
+        WHERE {_REAL} AND NOT {_INFRA}
+        GROUP BY tier, model, effort
+    """).fetchall()
+
+    arms: dict[tuple[str, str], dict[str, dict]] = {}
+    for r in rows:
+        arms.setdefault((r["tier"], r["model"]), {})[r["effort"]] = dict(r)
+
+    out = []
+    for (tier, model), by_effort in arms.items():
+        off, high = by_effort.get("off"), by_effort.get("high")
+        if not off or not high or off["n"] < min_n or high["n"] < min_n:
+            continue
+        off_pct = 100.0 * off["passed"] / off["n"]
+        high_pct = 100.0 * high["passed"] / high["n"]
+        out.append({
+            "tier": tier, "model": model,
+            "off_n": off["n"], "off_pct": off_pct,
+            "high_n": high["n"], "high_pct": high_pct,
+            "delta": high_pct - off_pct,
+            "censored_pct": 100.0 * high["censored"] / high["n"],
+            "nocode_pct": 100.0 * high["nocode"] / high["n"],
+            "avg_reasoning": high["avg_reasoning"] or 0,
+        })
+    out.sort(key=lambda r: (r["tier"], -r["delta"]))
+    return out
+
+
 # ------------------------------------------------------- comparable statistics
 #
 # The grid is unbalanced: the `off` configs have 320 problems each, the `high`
-# configs 51-104, and the held-out model 16-23. A cost-accuracy number computed
+# configs 73-104, and the held-out model 16-23. Note the `off` arm is NOT
+# uniformly 320: deepseek-v4-pro|off ran only 51 problems and kimi|off 16, so
+# "51" is an OFF config, not a thinking one. A cost-accuracy number computed
 # per config over THAT config's own problems compares models on different exams
 # and is not a frontier, however it is labelled.
 #

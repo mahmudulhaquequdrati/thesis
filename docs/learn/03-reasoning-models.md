@@ -143,8 +143,8 @@ Now combine two facts:
 
 So a truncated thinking call is the worst possible outcome: **maximum cost, zero
 value.** In your data, **49 calls burned an average of 29,584 reasoning tokens
-and returned nothing at all**, costing $0.56 — about **15% of everything you
-spent**.
+and returned nothing at all**, costing $0.56 — **15% of everything you spent on
+reasoning-enabled calls**, and 11% of all spend.
 
 And there is a subtler consequence that lesson 16 is entirely about: a ceiling
 does not just cause failures, it **censors your measurements**. If you cannot
@@ -246,8 +246,8 @@ spread is the thing you measured.
    `{enabled: false}` genuinely changes behaviour, so the honest description is
    off/on.
 5. You pay for every token generated up to the ceiling, and you receive nothing
-   usable. Maximum cost, zero value — 49 such calls cost you $0.56, ~15% of all
-   spend.
+   usable. Maximum cost, zero value — 49 such calls cost you $0.56, 15% of the
+   reasoning arm's $3.62 and 11% of all spend.
 6. Causing failures means those calls fail — bad, but a real property you can
    report. Censoring means *you can never observe what would have happened*
    above the ceiling, so any conclusion about long reasoning is biased by the

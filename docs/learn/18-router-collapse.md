@@ -37,6 +37,46 @@ and is therefore not pre-inference). No model internals (you do not have them �
 these are API-served models). No training (that needs labelled data you would
 have to buy).
 
+#### 🔴 Free is not the same as available — and this is the criticism that hurts
+
+Read that feature list again and ask, for each one: *if a user showed up with a
+brand-new coding problem, would I have this?*
+
+| feature | where it actually comes from | have it for a new problem? |
+|---|---|---|
+| difficulty tier | `problems.difficulty` — **LiveCodeBench's own hardness label**; for HE+/MBPP+ it degrades to the benchmark's name | **No.** Benchmark metadata |
+| number of tests | `problems.n_tests` = base + plus — **the size of the hidden grading suite** | **No.** Not knowable until it has been graded |
+| prompt length | the prompt text | **Yes** |
+
+**Two of the three are metadata, not prompt features.** `carr/db.py`'s schema
+comment even labels `n_tests` "A CARR router feature", which is where the
+assumption slipped in unnoticed.
+
+Why this matters so much: the proposal's whole positioning is routing *"using
+only cheap, non-LLM structural and lexical features"* of **the incoming
+prompt**. That is not what was built — and this is true **whether or not the
+router worked**. Even a successful router here would not have demonstrated the
+claim.
+
+**Three things to do with it.**
+
+1. **Volunteer it.** It is the single sharpest thing an examiner can say about
+   this section, and saying it first converts an attack into evidence that you
+   audit your own work.
+2. **Qualify the good news.** "Feature insufficiency 0.0 — the features are
+   sufficient to reach the oracle" really means *these features, two thirds of
+   which are labels a deployment would not have, are sufficient*. Smaller claim,
+   and the ceiling is fitted on top of that.
+3. **Know what survives.** The oracle, the hull and the 13.8-point headroom use
+   **none** of these features — they are computed from outcomes and costs. The
+   measurement of how much headroom exists is untouched. It is only the
+   *router's* claim that is damaged.
+
+And it sharpens the future-work sentence, which is what a good negative result
+should do: *a deployable router has one usable feature here — prompt length —
+plus whatever else the prompt text yields (keyword presence, code-block
+structure, requested signature count), and none of that was measured.*
+
 The method is **k-nearest-neighbours**: for a new problem, find the *k* most
 similar known problems, and copy whatever configuration was cheapest-and-passing
 for them.

@@ -7,11 +7,38 @@ plus the piece THESIS.md section 10.2 calls "the most genuinely yours":
     insufficiency + label noise + estimation error. This is the most genuinely
     yours, and it converts a negative result into a diagnostic one.
 
-**Every feature here is free.** No forward pass, no draft answer, no hidden
-states, no embedding model -- only what the problem statement already tells you
-before a single token is bought. That is the whole "cheapest possible router"
-claim (section 15.3); a router that must first call a model to decide whether to
-call a model has already spent the money it was trying to save.
+**Every feature here is free of API cost** -- no forward pass, no draft answer,
+no hidden states, no embedding model. A router that must first call a model to
+decide whether to call a model has already spent the money it was trying to
+save, which is the "cheapest possible router" claim in section 15.3.
+
+⚠️ **But "free" is not the same as "available", and this file used to claim it
+was. Two of the three features are BENCHMARK METADATA, not properties of an
+incoming prompt:**
+
+    rank          <- COALESCE(difficulty, benchmark). `difficulty` is
+                     LiveCodeBench's OWN hardness label, assigned by the
+                     benchmark; for HumanEval+/MBPP+ it degrades to the
+                     benchmark name. A user arriving with a new problem does
+                     not have this, and if they could label difficulty reliably
+                     they would already have solved most of the routing problem.
+    n_tests       <- problems.n_tests, which is base + plus, i.e. the size of
+                     the HIDDEN GRADING SUITE. It is not knowable before the
+                     problem has been graded. db.py's schema comment even labels
+                     it "A CARR router feature".
+    prompt_chars  <- the only one genuinely computable from the incoming prompt.
+
+So the proposal's positioning -- routing "using only cheap, non-LLM structural
+and lexical features" of the arriving prompt -- is NOT what this implements, and
+that is true independently of whether the router worked. Report it as a
+limitation of the feature set, and note the consequence for feature_ceiling()
+below: "these features are sufficient to reach the oracle" is a much weaker
+statement than it sounds, because two thirds of them are metadata a deployment
+would not have.
+
+A genuinely deployable version has one feature (prompt length) plus whatever
+else can be computed from the prompt text -- keyword presence, code-block
+structure, requested signature count -- and none of that was measured here.
 
 The honest baseline is the convex hull, not the best single config. If you may
 split traffic between two configurations, everything on the line between them is
@@ -78,12 +105,16 @@ def outcome_grid(conn, config_ids: list[int],
     """{problem_id: {config_id: {'solved', 'cost'}}} -- the table itself."""
     marks_c = ",".join("?" * len(config_ids))
     marks_p = ",".join("?" * len(problem_ids))
+    # Reuses analysis._WASTED rather than restating it. It had been duplicated
+    # here, which is how two definitions of "did this cell solve the problem"
+    # drift apart -- and the router's routing LABEL is derived from this column,
+    # so a divergence would silently mean the router and the frontier were
+    # scored against different ground truth.
     rows = conn.execute(f"""
         SELECT g.problem_id, g.config_id,
                COALESCE(g.cost_actual_usd, g.cost_computed_usd) AS cost,
-               CASE WHEN COALESCE(g.cost_actual_usd, g.cost_computed_usd) > 0
-                     AND (g.finish_reason = 'length' OR g.error IS NOT NULL)
-                    THEN 0 ELSE COALESCE(r.passed, 0) END AS solved
+               CASE WHEN {analysis._WASTED} THEN 0
+                    ELSE COALESCE(r.passed, 0) END AS solved
         FROM generations g
         JOIN results r ON r.gen_id = g.gen_id
         WHERE COALESCE(g.is_mock, 0) = 0

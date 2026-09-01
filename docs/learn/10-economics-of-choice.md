@@ -99,6 +99,16 @@ Your measured spread:
 **305× from cheapest to dearest.** Or, as research-framing puts it: the
 difference between a $50 and a $15,000 monthly bill for the same work.
 
+⚠️ **But notice which problems each row sat.** The cheapest row is over 107
+problems and the dearest over 22 — *different* problems, with a different
+difficulty mix. So that 305× mixes a price difference with an exam difference.
+On the 22 problems those two configurations actually share it is **228×**, and
+across the six configurations that all sat the identical 60-problem exam the
+full spread is **65×**. `scripts/results.py` prints all three. This is the
+single most likely place for an examiner to catch a denominator error, so learn
+the habit here: *a ratio between two rows is only a ratio if both rows sat the
+same exam.*
+
 ### Mixing: why "the best single option" is a weak baseline
 
 Here is the idea that makes your Chapter 6 sharp, and it is genuinely

@@ -58,7 +58,7 @@ One command, once. If this passes, everything in the course will run.
 ```bash
 cd ~/thesis
 uv sync                    # builds the Python 3.12 environment
-uv run pytest -q           # expect: 119 passed
+uv run pytest -q           # expect: 132 passed
 ```
 
 If you do not know what `uv` is, that is fine — lesson 21 explains it. For now
@@ -116,7 +116,7 @@ is you writing the actual document, with me alongside.
 | [12](12-the-design.md) | The experimental design | 320 problems × 10 configs, and why each choice was made |
 | [13](13-saturation.md) | Finding 1 — most benchmark problems are useless | 141 of 320 can tell configurations apart |
 | [14](14-when-thinking-helps.md) | Finding 2 — thinking works, conditionally | Doubles on hard, nothing on easy |
-| [15](15-expensive-failure.md) | Finding 3 — expensive failure | 29,584 tokens to return nothing, 15% of all spend |
+| [15](15-expensive-failure.md) | Finding 3 — expensive failure | 29,584 tokens to return nothing, 15% of reasoning spend |
 | [16](16-the-abort-story.md) | Finding 4 — the claim that was refuted | How a token ceiling manufactured a finding |
 | [17](17-frontier-and-oracle.md) | Finding 5 — the frontier, the hull, the oracle | 13.8 points is what knowing the problem is worth |
 | [18](18-router-collapse.md) | Finding 6 — the router collapsed, and why | A negative result that says which direction to fix |
@@ -136,8 +136,8 @@ is you writing the actual document, with me alongside.
 | [27](27-database-code.md) | `db.py` | The schema, and `request_hash` — never pay twice |
 | [28](28-runner.md) | `experiment.py`, `runner.py` | The cost cap that aborts before spending |
 | [29](29-analysis-code.md) | `stats.py`, `analysis.py` | Every number in the thesis |
-| [30](30-router-figures.md) | `router.py`, `figures.py` | The router, the decomposition, the four PNGs |
-| [31](31-scripts-and-tests.md) | `scripts/`, `tests/` | The tools, and the 119 tests that keep it honest |
+| [30](30-router-figures.md) | `router.py`, `figures.py` | The router, the decomposition, the five PNGs |
+| [31](31-scripts-and-tests.md) | `scripts/`, `tests/` | The tools, and the 132 tests that keep it honest |
 
 ### Part 4 — Writing the thesis
 

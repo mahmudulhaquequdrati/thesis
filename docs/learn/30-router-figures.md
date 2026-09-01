@@ -105,7 +105,7 @@ evidence.
 
 ---
 
-## `figures.py` — four PNGs, and a design philosophy
+## `figures.py` — five PNGs, and a design philosophy
 
 ```
 fig_effort_by_tier     when thinking helps, and where it does not

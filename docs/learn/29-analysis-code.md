@@ -133,9 +133,24 @@ noise *and* dilute the waste finding.
 | `frontier_subset()`, `frontier()` | the 6 × 60 set and its points | 17 |
 | `pareto_front()`, `upper_hull()`, `hull_accuracy_at()` | dominance, the two vertices | 17 |
 | `oracle()` | 98.3% at $0.00111 | 17 |
+| **`within_model_effect()`** | **the sign reversal: +52.9 vs −18.2 on the same tier** | **14** |
+| **`waste_by_model()`** | **76% of the waste is one model (37/99)** | **15** |
+| **`discrimination_by_coverage()`** | **82% discriminate at ≥6 configs** | **13** |
+| **`style_composition()`, `style_matched_effect()`** | **the matched +25.7 / +28.9** | **14** |
 
 Read that table as a map: **each row is a paragraph of your results chapters,
 and the function is where its number comes from.**
+
+⚠️ **The four bold rows were added on 2026-09-01, and they exist for one
+reason:** every aggregate above them turned out to average over groups that
+behave differently — models that respond to reasoning in opposite directions,
+problems measured on two configurations sitting beside problems measured on ten,
+and two LiveCodeBench execution styles the effort arms did not sample equally.
+
+That is the general lesson of this lesson, and it is worth more than any single
+function: **whenever you are about to quote a rate, ask what it is an average
+over.** If the groups inside it disagree, the average describes none of them —
+and an examiner who splits it will find that out before you do.
 
 ### `paired_problems()` — the comparability fix
 

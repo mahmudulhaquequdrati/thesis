@@ -7,7 +7,8 @@
 ## In one sentence
 
 > **49 calls burned an average of 29,584 reasoning tokens and returned nothing
-> at all** — about **15% of everything you spent** — and a model that thinks for
+> at all** — **15% of everything you spent on reasoning-enabled calls**, 11% of
+> all spend — and a model that thinks for
 > a very long time is not working harder, it is failing expensively.
 
 ---
@@ -57,9 +58,38 @@ So the honest statement is not "long thinking means wrong". It is:
 That distinction matters. The signal is not about correctness; it is about
 **termination**.
 
-### The economics: 15% of the budget bought nothing
+### 🔴 First: 76% of that waste is one model
 
-$0.56 of $5.24 — call it **one dollar in seven** — went on calls that returned no
+Before the economics, split it. Share of each model's thinking calls that were
+billed and returned nothing:
+
+| model | wasted / thinking calls | rate | mean reasoning |
+|---|---|---|---|
+| **`qwen3.5-9b`** | **37 / 99** | **37.4%** | 30,411 |
+| `qwen3.6-35b-a3b` | 7 / 74 | 9.5% | 16,635 |
+| `deepseek-v4-flash` | 3 / 73 | 4.1% | 48,000 |
+| `deepseek-v4-pro` | 2 / 72 | 2.8% | 31,999 |
+| `kimi-k2.6` | 0 / 22 | 0.0% | — |
+
+**Thirty-seven of the forty-nine wasted calls are the smallest model on the
+roster.** So the aggregate rate is the wrong thing to hand a practitioner — it
+describes a roster, not a decision. The finding is sharper stated per model:
+
+> **Non-termination is a property of the small model, not of reasoning.** About
+> a third of `qwen3.5-9b`'s thinking calls returned nothing at all; about one in
+> twenty-five of `deepseek-v4-flash`'s did.
+
+This is the same shape as lesson 14's sign reversal, and for the same reason:
+averaging across a roster whose members behave differently produces a number
+that describes none of them. Whenever you are about to quote a rate in this
+thesis, ask *"is this an average over models that disagree?"*
+
+Run it: `carr.analysis.waste_by_model()`, printed by `scripts/results.py`.
+
+### The economics: 15% of the reasoning budget bought nothing
+
+$0.56 of the $3.62 spent on reasoning-enabled calls — call it **one dollar in
+seven** — went on calls that returned no
 usable code.
 
 Restate it at deployment scale: run this workload at a $15,000/month spend and
@@ -100,7 +130,7 @@ Be precise, because this is a place where over-claiming is easy:
 |---|---|
 | "Reasoning models sometimes fail to terminate" | ❌ **Not novel.** ThoughtTerminator (Jul 2025), SelfBudgeter (May 2025), RecurGuard (2026) |
 | "Non-termination can be detected from reasoning length" | ❌ Also covered |
-| **"It costs 15% of a real code-generation budget, priced across a roster spanning 305× in cost per correct answer"** | ✅ **The economic framing is the less-covered part** |
+| **"It costs 15% of a real reasoning budget, priced across a roster spanning 305× in cost per correct answer"** | ✅ **The economic framing is the less-covered part** |
 
 Your prior-art check (2026-07-26) recorded this honestly and downgraded the
 claim at the time:
@@ -130,7 +160,9 @@ Presentation notes:
   what makes the third row surprising; without it, "long calls fail" sounds
   obvious.
 - **Convert to money immediately.** 29,584 tokens means nothing to most readers;
-  "15% of the budget bought nothing" means everything.
+  "15% of the reasoning budget bought nothing" means everything. Carry the
+  denominator with it — the figure is 15% of the $3.62 reasoning arm, 11% of the
+  $5.24 total, and an examiner who divides $0.56 by $5.24 will ask.
 - **State the two mechanisms and admit you cannot separate them.**
 - **Cite the three prior works in the same breath**, so the claim is scoped
   before anyone scopes it for you.
@@ -192,15 +224,16 @@ Divide. You should land near 15%.
    your data separate them?
 4. What part of this finding is novel, and what part is not? Name the prior
    work.
-5. Why does converting 29,584 tokens into "15% of spend" matter for the writing?
+5. Why does converting 29,584 tokens into "15% of reasoning spend" matter for the
+   writing, and which denominator must travel with that 15%?
 6. Why is the monotonic rise in reasoning length across tiers a useful validity
    check?
 
 <details>
 <summary>Answers</summary>
 
-1. 49 calls, mean 29,584 reasoning tokens, $0.56 — about 15% of the $5.24 spent
-   — returning no usable code at all.
+1. 49 calls, mean 29,584 reasoning tokens, $0.56 — 15% of the $3.62 spent on
+   reasoning-enabled calls, 11% of the $5.24 total — returning no usable code.
 2. Because passing and failing calls have nearly identical mean reasoning length
    (7,567 vs 7,577). Length does not separate right from wrong; it separates
    *finishing* from *not finishing*.

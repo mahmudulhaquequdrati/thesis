@@ -1,5 +1,10 @@
 # Thesis update for my advisor — 2026-07-26
 
+> **Numbers refreshed against the finished database.** This was drafted while
+> grading was still running, and the thinking arm moved substantially as it
+> completed. The figures below are now the ones `scripts/results.py` prints.
+> Superseded values are struck through where the change matters.
+
 **Original title:** *Cost-Aware Reasoning Routing (CARR): a training-free router
 that picks the cheapest (model, thinking-mode) pair that still solves a problem.*
 
@@ -7,7 +12,10 @@ that picks the cheapest (model, thinking-mode) pair that still solves a problem.
 in §4. I have pilot data that argues against the original and for the new one,
 and I would rather change direction now than after spending the budget.
 
-Total spent: **$5.25** of $15.00. Remaining: $9.75. 1,373 generations, 1,280 graded.
+Total spent: **$5.24** of $15.00 (`db.summary()` reports $5.240216 across 1,373
+stored generations; the account total is about $5.25, the difference being a
+handful of exploratory calls made outside the runner and never stored as rows).
+1,373 generations, 1,280 graded.
 
 ---
 
@@ -37,11 +45,15 @@ off / on:
 | HumanEval+ | 92.9% | 97.0% | no signal |
 | MBPP+ | 72.3% | 73.3% | weak |
 | LiveCodeBench easy | 94.1% | 100% | no signal |
-| LiveCodeBench medium | 53.3% | **64.3%** | yes |
-| LiveCodeBench hard | 24.9% | **31.3%** | yes |
+| LiveCodeBench medium | 53.3% | **76.4%** | yes |
+| LiveCodeBench hard | 24.9% | **54.2%** | yes |
 
-Of 320 problems with data, only **120 discriminate** between configs: 84 are
-solved by everything and 116 by nothing.
+*(Superseded, drafted mid-grading: ~~medium 64.3%, hard 31.3%~~. With grading
+finished, thinking more than doubles the hard-tier pass rate rather than adding
+six points.)*
+
+Of 320 problems with data, only **141 discriminate** between configs: 81 are
+solved by everything and 98 by nothing. *(Superseded: ~~120 / 84 / 116~~.)*
 
 **A second correction.** The pilot reported thinking as *worse* than
 not-thinking on hard problems (31% vs 50%). With 462 no-reasoning calls
@@ -99,8 +111,10 @@ has only two vertices:
 | deepseek-v4-pro \| high | $0.01088 | 95.0% | [88, 100] | dominated |
 | qwen3.6-35b-a3b \| high | $0.01093 | 68.3% | [57, 80] | dominated |
 
-Note `deepseek-v4-pro | high` costs **6× more than `flash | high` for 3 points
-less accuracy**. The expensive frontier model is not worth its price here.
+Note `deepseek-v4-pro | high` costs **6× more than `flash | high` with no
+measurable accuracy advantage** — 57/60 against 59/60 here, and an exact **tie,
+64/68 each, on the 68 problems the two actually share**. The expensive frontier
+model is not worth its price here.
 
 The oracle (cheapest config that solves each problem) reaches 98.3% at
 $0.00111/problem. A problem-*blind* mixture at the same budget reaches 84.5%.
@@ -167,7 +181,8 @@ models to think less, so runtime monitoring is not a redundant mechanism.
 ## 5. Honest limitations
 
 * **Most per-config numbers are not comparable, and the report says so.** The
-  `off` arm covers 320 problems, the `high` arm 51–104, the held-out model
+  `off` arm covers 320 problems for three of five models (`pro|off` only 51,
+  `kimi|off` 16), the `high` arm 73–104, the held-out model
   16–23. Every comparable statistic is therefore computed over the **107
   problems with both arms graded**, with the denominator and per-config `n`
   printed beside it. Balancing would cost ~$1.50.

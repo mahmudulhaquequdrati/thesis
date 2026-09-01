@@ -92,7 +92,7 @@ any bug.** Final spend $5.25.
 
 | What happened | What changed |
 |---|---|
-| First cell: `HumanEval/0`, 10/10 pass, 58× cost spread | Sampling re-weighted to difficulty-spread; hard tier became load-bearing |
+| First cell: `HumanEval/0`, 10/10 pass, 58× cost spread (44× at pinned prices) | Sampling re-weighted to difficulty-spread; hard tier became load-bearing |
 | Pilot: 7 of 16 hard thinking calls truncated at 16k | Ceiling raised 16k → 32k → 48k before the grid |
 | Pilot: thinking scored *worse* on hard | Investigated rather than reported; cause was truncation |
 | `subset_only` stored but not honoured | Fixed; grid cost fell $7.51 → $4.59 |

@@ -44,7 +44,7 @@ fails to terminate.
 
 - **Damages:** any claim to discovering non-termination.
 - **Survives:** the **economic** framing — dollars per correct answer across a
-  price-varying roster, and the finding that 15% of spend buys nothing.
+  price-varying roster, and the finding that 15% of reasoning spend buys nothing.
 
 ### 3. Not contamination-controlled
 
@@ -70,10 +70,59 @@ including 5 adjacent CPC pairs, and the `flash|high` vs `pro|high` accuracy
 comparison ([95,100] vs [88,100]).
 
 - **Damages:** individual orderings between adjacent configurations.
-- **Survives:** the large effects. A 29-point pass-rate gap on hard problems and
-  a 305× CPC spread are not fragile to sample size. **Directions are clear;
+- **Survives:** the large effects. A 26-point style-matched pass-rate gap on
+  hard problems and a CPC spread of 65× *on an identical exam* (305× across the
+  roster) are not fragile to sample size. **Directions are clear;
   fine-grained orderings often are not** — and you say which is which, rather
   than letting the reader guess.
+
+### 4a. 🔴 Not a tier-level story — the aggregate averages opposite effects
+
+The off-vs-on comparison per tier pools five models. Split by model, the
+hard-tier effect **changes sign**: `deepseek-v4-flash` gains **+52.9** points
+(29.2% → 82.1%, n=154/28) while `qwen3.5-9b` loses **18.2** (22.1% → 3.8%,
+n=145/26). The reported "+29.3" describes neither.
+
+- **Damages:** every aggregate off-vs-on row, including the headline. They are
+  averages over opposite effects and should not be quoted as findings.
+- **Survives, and is stronger:** *the value of reasoning is a property of the
+  (model, difficulty) pair.* That is a better sentence than the one it replaces,
+  and it gives a usable rule instead of an average.
+- **Must be separated:** the two mechanisms behind a negative delta.
+  **Non-termination** — `qwen3.5-9b|high` censors 81% of hard calls at the
+  48,000 ceiling and returns no code on 77%, so that number is partly *our
+  ceiling* censoring a rambling model harder than a concise one.
+  **Genuine degradation** — on MBPP+ the same model censors 0%, reasons 368
+  tokens, terminates, and still loses 24.4 points on the same 20 problems with
+  every failure an assertion error. Truncation is ruled out there.
+- **Still thin:** the per-model thinking arms are 18–36 calls each. Directions,
+  not precise magnitudes.
+
+### 4b. 🔴 Not style-balanced — and this one moves a headline
+
+LiveCodeBench ships stdin→stdout (AtCoder) and `Solution`-class (LeetCode)
+problems, and the effort arms cover them very unevenly. On the hard tier the
+`off` arm is **348 stdin / 114 functional**; the `high` arm is **8 / 110**.
+
+**The cause is the run order, not a design choice.** `runner.plan` breaks ties
+on `problem_id` as a string; LeetCode ids are numeric and AtCoder ids start with
+letters; so all 125 functional problems ran before any of the 217 stdin ones,
+and the thinking arm hit the cost cap inside that prefix.
+
+- **Damages:** the raw tier-level effort comparison, and the representativeness
+  of the 60-problem frontier set (51 functional / 2 stdin, all 19 hard ones
+  functional). The hull, oracle, 13.8-point headroom and router result therefore
+  describe **function-style** problems.
+- **Survives:** the finding itself, restated within a style — hard **31.6% →
+  57.3%** (n=114/110, +25.7) and medium **49.1% → 78.0%** (n=163/141, +28.9).
+  The medium effect is *larger* under matching, which is what a genuine
+  composition effect looks like rather than a convenient one.
+- **Cannot be claimed at all:** what reasoning does on stdin-style problems. The
+  arm is n=8. Say so and stop; a rate from eight observations is not a result.
+
+This is the best limitation in the chapter to write well, because the fix was
+free (a re-analysis, not a re-purchase) and because it shows the run order is
+part of the method — the same lesson as the token ceiling in lesson 16.
 
 ### 5. Not free of censoring
 
@@ -88,7 +137,8 @@ comparison ([95,100] vs [88,100]).
 
 ### 6. The grid is unbalanced
 
-`off` configurations ran 320 problems; `high` 51–104; the held-out model 16–23.
+`off` configurations ran 320 problems for three of five models — `pro|off` only
+51 and `kimi|off` 16 — while `high` ran 73–104, and `kimi|high` 23.
 Cost, not design.
 
 - **Damages:** any per-configuration statistic computed over that

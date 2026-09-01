@@ -53,7 +53,10 @@ is whether reasoning is enabled.
 | `deepseek/deepseek-v4-pro` | deepseek | frontier open-weight reasoner | 1.251 |
 | `moonshotai/kimi-k2.6` | moonshot | **held out** for RQ5, subset only | 3.400 |
 
-**Output prices span 22×.** Combine that with thinking's ~10× token multiplier
+**Output prices span 22×.** Combine that with thinking's token multiplier —
+**measured at 4.3×**, mean completion 3,166 tokens with reasoning off against
+13,604 with it on, over 1,355 graded calls; the ~10× you will see quoted in
+older notes was an estimate made before any data
 and the most expensive configuration costs roughly **200×** the cheapest for the
 same problem. *That spread is the thesis.*
 
@@ -87,7 +90,8 @@ You chose the first, and the reason is precise:
 > configuration. A sparse grid destroys the ground truth.
 
 ⚠️ **And then reality intervened.** The grid ended up unbalanced anyway — `off`
-configurations have 320 problems, `high` 51–104, kimi 16–23 — because thinking
+configurations have 320 problems for three of five models (`pro|off` 51,
+`kimi|off` 16), `high` 73–104, kimi 16–23 — because thinking
 calls cost far more than projected and buying stopped at $5.25. So the principle
 was right and the execution was partial, which is why `paired_problems()` (107
 of 320) exists at all.
@@ -214,7 +218,9 @@ uv run python scripts/view.py --list | head -20
 uv run python scripts/view.py HumanEval/0
 ```
 
-Ten configurations, ten passes, **58× cost spread**. The last line names the
+Ten configurations, ten passes, a **44× cost spread** as the database stands
+today (**58×** as first observed, before providers were pinned re-priced the
+roster — see lesson 04). The last line names the
 cheapest configuration that solved it — that is the routing label.
 
 **3. Look at the grid's real shape.**

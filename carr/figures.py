@@ -235,9 +235,75 @@ def fig_abort_curve(conn, seed: int = 0) -> Path:
     return _save(fig, "04-abort-tradeoff")
 
 
+# ------------------------------------------------------------------ figure 5
+
+
+def fig_effect_by_model(conn) -> Path:
+    """The effect of reasoning per (tier, model). Now the headline figure.
+
+    Figure 1 is an aggregate, and the aggregate averages over models whose
+    responses point in opposite directions: +52.9 points on deepseek-v4-flash
+    and -18.2 on qwen3.5-9b, on the same hard problems. A reader who sees only
+    figure 1 draws a conclusion neither model supports.
+
+    Bars are the delta, so the sign is the message. Censoring is annotated on
+    every negative bar because it is what separates the two failure modes -- a
+    -18.2 at 81% censored is a model that will not stop, while a -24.4 at 0%
+    censored is a model that terminated and got it wrong.
+    """
+    rows = analysis.within_model_effect(conn)
+    if not rows:
+        raise RuntimeError("no (tier, model) pair has both arms covered")
+
+    label = {"mbpp_plus": "MBPP+", "humaneval_plus": "HumanEval+",
+             "easy": "LCB easy", "medium": "LCB medium", "hard": "LCB hard"}
+    order = {"mbpp_plus": 0, "humaneval_plus": 1, "easy": 2, "medium": 3, "hard": 4}
+    rows = sorted(rows, key=lambda r: (order.get(r["tier"], 9), -r["delta"]))
+
+    names = [f"{label.get(r['tier'], r['tier'])}\n{r['model'].split('/')[1]}"
+             for r in rows]
+    deltas = [r["delta"] for r in rows]
+
+    x_lo = min(deltas) - 34
+    fig, ax = plt.subplots(figsize=(9.0, 4.4))
+    bars = ax.barh(range(len(rows)), deltas,
+                   color=[HIGH_C if d >= 0 else ACCENT for d in deltas],
+                   edgecolor=INK, linewidth=0.6)
+
+    for i, (b, r) in enumerate(zip(bars, rows)):
+        d = r["delta"]
+        # The delta and its two denominators, so no bar can be read without them.
+        ax.text(d + (1.4 if d >= 0 else -1.4), i, f"{d:+.1f}",
+                va="center", ha="left" if d >= 0 else "right",
+                fontsize=8.5, color=INK)
+        # Pinned to the left margin, never over a bar: on the dark fill the
+        # grey was unreadable, and these denominators are the point.
+        ax.text(x_lo + 0.8, i,
+                f"{r['off_pct']:.0f}% (n={r['off_n']}) -> "
+                f"{r['high_pct']:.0f}% (n={r['high_n']})",
+                va="center", ha="left", fontsize=6.6, color="#555")
+        if r["censored_pct"] >= 20:
+            ax.text(d + (1.4 if d >= 0 else -1.4), i - 0.32,
+                    f"{r['censored_pct']:.0f}% truncated",
+                    va="center", ha="left" if d >= 0 else "right",
+                    fontsize=6.4, color=ACCENT)
+
+    ax.axvline(0, color=INK, lw=1.0)
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels(names, fontsize=7.5)
+    ax.invert_yaxis()
+    ax.set_xlabel("percentage points gained by enabling reasoning", fontsize=9)
+    ax.set_xlim(x_lo, max(deltas) + 14)
+    ax.set_title("The effect of reasoning is a property of the MODEL,\n"
+                 "not of the difficulty tier",
+                 fontsize=10.5, color=INK, pad=10)
+    _style(ax)
+    return _save(fig, "05-effect-by-model")
+
 def make_all(conn, seed: int = 0) -> list[Path]:
     out = []
     for fn in (lambda c: fig_effort_by_tier(c),
+               lambda c: fig_effect_by_model(c),
                lambda c: fig_reasoning_outcome(c),
                lambda c: fig_frontier(c, seed=seed),
                lambda c: fig_abort_curve(c, seed=seed)):

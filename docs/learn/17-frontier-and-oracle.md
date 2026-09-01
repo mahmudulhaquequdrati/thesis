@@ -31,6 +31,28 @@ you are doing.
 ⚠️ And be upfront: 60 problems is not many, and it is why several intervals here
 overlap.
 
+### 🔴 And say *which* 60, because they are not a representative draw
+
+Those 60 problems are **51 LeetCode function-style, 2 AtCoder stdin-style**, and
+7 from the easy benchmarks. **All 19 of their hard problems are function-style**
+— against a pool whose hard tier is 117 stdin to 37 functional.
+
+That is not a sampling decision; it is the run order leaking into the analysis.
+`runner.plan` breaks ties on `problem_id` as a string, LeetCode ids are numeric
+and AtCoder ids start with letters, so every functional problem ran before any
+stdin one and the expensive configurations stopped at the cost cap inside that
+prefix (lesson 14 has the full story).
+
+**What follows for this lesson:** everything below — the two-vertex hull, the
+98.3%, the oracle, the 13.8 points, and the router result in lesson 18 —
+describes **function-style problems**. Write it that way:
+
+> Over 60 problems shared by six configurations, of which 51 of the 53
+> LiveCodeBench problems are function-style completions…
+
+You lose nothing by saying it, and you lose the result if someone else says it
+first.
+
 ### Result 1 — the hull has two vertices
 
 | configuration | cost/problem | accuracy | status |
@@ -84,6 +106,39 @@ So:
 
 > **13.8 accuracy points is the measured value of knowing something about the
 > problem before choosing.**
+
+### Why the oracle's 98.3% is *exactly* `flash|high`'s — have this ready
+
+An examiner who is paying attention will notice the oracle and the best single
+configuration report the same accuracy and will ask whether something is wrong.
+Nothing is. Here is the mechanism, and it sharpens the whole section:
+
+- `flash|high` solved **59 of the 60** problems.
+- The one it missed, `LiveCodeBench/3613`, was solved by **nothing**.
+- So no per-problem choice could beat it on accuracy. The oracle's ceiling *is*
+  `flash|high`'s ceiling on this set.
+
+**What the oracle buys is therefore not accuracy — it is price.** It reaches the
+same 98.3% at **$0.00111** per problem instead of **$0.00177**, by sending most
+problems somewhere cheaper:
+
+| oracle routes to | problems |
+|---|---|
+| `flash\|off` | 37 |
+| `flash\|high` | 18 |
+| `qwen3.5-9b\|off` | 3 |
+| `qwen3.6-35b\|off` | 1 |
+
+Only **18 of 59** solved problems actually needed the thinking configuration.
+The other 41 were solvable by something far cheaper — and *that* is the value of
+knowing which problem you are looking at.
+
+So state the 13.8 points correctly: it is the gap between the oracle and a
+**problem-blind mixture at the same budget**. It measures *"how much cheaper can
+you get to this accuracy if you know the problem"*, not *"how much more accurate
+can you get"*. On this set those are different questions, and only the first has
+a positive answer.
+
 
 That is the sharp form of RQ4, and it is what THESIS.md §10.1 set out to
 produce: *"CARR's margin over the convex hull is the measured value of
@@ -206,10 +261,12 @@ You should end with two survivors.
 2. Two: `flash|off` and `flash|high`. Every other configuration is beaten by a
    mixture of those two — the roster effectively reduces to one model with
    thinking off or on.
-3. `deepseek-v4-pro | high` costs 6× more than `flash | high` for 3 points less
-   accuracy (95.0% vs 98.3%) — **but the accuracy intervals overlap ([95,100] vs
-   [88,100]), so the direction is suggestive rather than established.** What is
-   solid: no measurable advantage at 6× the price.
+3. `deepseek-v4-pro | high` costs 6× more than `flash | high` with **no
+   measurable accuracy advantage**. On this set 57/60 against 59/60, and the
+   intervals overlap ([88,100] vs [95,100]) so a 3-point *gap* is not
+   established. Better still, on the **68 problems the two actually share they
+   tie exactly, 64/68 each** — which is the claim to make, because it needs no
+   interval argument at all.
 4. The optimal *non-adaptive* strategy — the best achievable by splitting traffic
    between configurations without looking at the problem. It is not a strawman
    because it is provably optimal within its class.

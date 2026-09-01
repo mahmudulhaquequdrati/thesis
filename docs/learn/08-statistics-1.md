@@ -95,7 +95,7 @@ Your grid is **unbalanced**. Not every configuration ran on every problem:
 | Configuration group | Problems each |
 |---|---|
 | `off` configurations | 320 |
-| `high` configurations | 51–104 |
+| `high` configurations | 73–104 (kimi 23) |
 | the held-out model (kimi) | 16–23 |
 
 Why? Money. Thinking calls cost 10–100× more, so you bought fewer of them.
@@ -178,7 +178,7 @@ attached. Compare:
 | Sloppy | Defensible |
 |---|---|
 | "Thinking doubles the pass rate" | "On LCB hard, 24.9% → 54.2% (n = 462 / 118 calls over 107 paired problems)" |
-| "Cost per correct spans 305×" | "Over the 107 problems where both arms were measured, CPC spans $0.00021 to $0.06320" |
+| "Cost per correct spans 305×" | "Over the 22 problems those two configurations share, CPC spans $0.00028 to $0.06320 — 228×; across the six configurations that sat the identical 60-problem exam, 65×" |
 | "The oracle gains 13.8 points" | "Over the 60 problems shared by all six configurations, 98.3% vs 84.5%" |
 
 The right-hand column is what gets marks. The left-hand column is what gets

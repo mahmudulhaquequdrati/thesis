@@ -211,10 +211,17 @@ this script is how you prove the roster was not invented.
 uv run python scripts/view.py HumanEval/0
 ```
 
-Every configuration solved this problem. The cost of doing so ranged **58×**,
-from $0.000081 to $0.004673. Identical outcome, 58× the price. Sit with that for
+Every configuration solved this problem. The cost of doing so ranged **44×**,
+from $0.000106 to $0.004630. Identical outcome, 44× the price. Sit with that for
 a moment — it is the cleanest single illustration of your thesis's motivation,
 and it belongs in Chapter 1.
+
+*(You will see **58×** quoted in the project log and in Chapter-3 history. That
+was the same cell priced before providers were pinned — pinning re-priced
+several models, and costs were later reconciled against the actual bill. 58× is
+the historical observation; **44× is what reproduces today**. This is a good
+habit to notice: a price table is a snapshot, and a number computed from one is
+only as reproducible as the snapshot behind it.)*
 
 ---
 

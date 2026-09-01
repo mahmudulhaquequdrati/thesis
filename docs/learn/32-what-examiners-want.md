@@ -35,7 +35,7 @@ Not "is it sophisticated". **Is it sound.** Specifically:
 | Could this be reproduced? | Fixed seeds throughout; `results.py` run twice diffs identical; roster pinned with snapshot dates |
 | Are the labels trustworthy? | Grading in one file, wrapping the standard checker, validated against 210 canonical solutions |
 | Are the comparisons fair? | Effort pairs hold the model constant; comparable statistics restricted to 107 paired problems |
-| Do you know what it cost? | Every call priced from the actual bill, not an estimate; both stored so drift is visible |
+| Do you know what it cost? | Costs from measured token counts × the pinned endpoint price; the 139 pilot calls also reconciled against the actual bill, both stored so drift is visible |
 
 **Your strongest evidence here is not that nothing went wrong — it is that things
 went wrong and your checks caught them.** The macOS grading bug and the censored

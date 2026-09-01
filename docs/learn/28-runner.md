@@ -239,7 +239,7 @@ cd ~/thesis
 sed -n '1,25p' carr/runner.py
 ```
 
-**2. Run the 16 tests on the cap alone.**
+**2. Run the 19 tests on that loop.**
 
 ```bash
 uv run pytest tests/test_runner.py -v

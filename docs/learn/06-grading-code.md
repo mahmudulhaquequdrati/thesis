@@ -175,12 +175,13 @@ The argument you can make is strong, and it is concrete:
 
 1. Grading is in exactly one file, wrapping the standard tool rather than
    hand-rolled.
-2. The instrument is checked against known-correct solutions — **210 canonical
+2. The instrument is checked against known-correct solutions — **3 in the
+   standing suite, and a retired one-off sweep of 210 canonical
    solutions across both EvalPlus benchmarks, all passing.**
 3. That check **caught a real, silent, project-ending bug** (the macOS one).
 4. For the benchmark with no canonical solutions, references were hand-written
    to restore the check.
-5. **119 tests** cover this and the rest of the harness.
+5. **132 tests** cover this and the rest of the harness.
 
 Point 3 is the one to lead with. Anyone can claim their harness is careful.
 "Here is the bug my checks caught, and here is what it would have cost me" is

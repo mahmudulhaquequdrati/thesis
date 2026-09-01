@@ -154,8 +154,8 @@ framing.
 
 1. Restate the question and answer it in one paragraph
 2. The practitioner's guidance: **thinking on hard problems, off elsewhere;
-   expect ~15% waste; abort at 16k if you will trade 12% of solutions for half
-   the cost**
+   expect ~15% waste on the reasoning arm; abort at 16k to trade 12% of
+   solutions for half the cost**
 3. The researcher's guidance: **pin your provider and quantization; report your
    truncation rate; say which subset of your benchmark carries signal**
 4. Future work, named specifically — a cost-aware routing objective; a

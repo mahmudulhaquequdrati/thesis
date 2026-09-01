@@ -49,7 +49,7 @@ decisions log for that reason.
 | `python-dotenv` | Loads `.env` so the API key never lands in code |
 | `evalplus` | HumanEval+/MBPP+ problems **and** the grader |
 | `PyYAML` | The roster and experiment config |
-| `pytest` | 119 tests |
+| `pytest` | 132 tests |
 | `matplotlib` | Four figures — **the only dependency added after week 1** |
 
 And two notable **non**-dependencies:
@@ -88,9 +88,9 @@ thesis/
 │   ├── stats.py           bootstrap CIs
 │   ├── analysis.py        every number in the thesis
 │   ├── router.py          the router and the gap decomposition
-│   └── figures.py         four PNGs
+│   └── figures.py         five PNGs
 ├── scripts/               ← the things you type. Thin wrappers over carr/
-├── tests/                 ← 119 tests
+├── tests/                 ← 132 tests
 └── data/
     ├── carr.sqlite        ← THE scientific asset. Gitignored. Back it up
     ├── backups/           ← auto-snapshots before any destructive write
@@ -188,7 +188,7 @@ cd ~/thesis
 uv sync && uv run pytest -q
 ```
 
-Expect **119 passed**.
+Expect **132 passed**.
 
 **2. Run the module that turns the roster into configurations.**
 

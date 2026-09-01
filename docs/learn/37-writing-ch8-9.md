@@ -87,7 +87,7 @@ Chapter 5 said. The conclusion answers: **so what?**
 - Enable reasoning for hard problems; leave it off for anything resembling
   standard benchmark tasks — you pay roughly an order of magnitude more tokens
   for one to six points.
-- Expect **~15% of spend** to buy nothing at all, concentrated in long
+- Expect **~15% of reasoning spend** to buy nothing at all, concentrated in long
   non-terminating traces.
 - If you will trade **12% of solved problems for roughly half the cost**, abort
   at 16,000 reasoning tokens. **There is no free threshold.**
@@ -199,7 +199,7 @@ Every number you got wrong from memory is a number to copy rather than recall.
 5. To answer "so what?" — to convert findings into what a reader should do
    differently, not to summarise chapters they have just read.
 6. Practitioner (any two): enable reasoning on hard problems only; expect ~15% of
-   spend to buy nothing; abort at 16k if trading 12% of solutions for half the
+   reasoning spend to buy nothing; abort at 16k if trading 12% of solutions for half the
    cost; do not assume the pricier model is better. Researcher (any two): pin
    provider and quantization; report truncation rates; state which subset of your
    benchmark carries signal; verify that budget parameters bind.

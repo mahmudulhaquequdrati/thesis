@@ -116,15 +116,18 @@ The current text conflates them. State:
 - **Pool: 884** — HumanEval+ 164, MBPP+ 378, LiveCodeBench 342.
 - **Run: 320 problems, 1,373 generations, $5.24.**
 - Coverage is **uneven by design and by budget**: the no-reasoning arm covers
-  320 problems, the thinking arm 51–104, the held-out model 16–23. Comparable
+  320 problems for three of five models (`pro|off` 51, `kimi|off` 16), the
+  thinking arm 73–104, the held-out model 16–23. Comparable
   statistics therefore use the **107-problem paired set**, and per-config `n` is
   reported on every row.
 - Drop the old "MBPP 500 → 150, LCB 200 → 120" numbers entirely.
 
 ## 7. §6.2 / Methods — the second grading harness
 
-LiveCodeBench needs execution the evalplus checker cannot do: **112 of its
-problems are stdin→stdout programs and 63 are methods on a `Solution` class.**
+LiveCodeBench needs execution the evalplus checker cannot do: **217 of its 342
+problems are stdin→stdout programs and 125 are methods on a `Solution` class.**
+*(Do not quote the older 112 / 63 split — that is LCB v6 alone, and the pool
+actually loaded is v5+v6.)*
 And **LCB ships no canonical solutions**, so the harness is validated against
 **hand-written reference implementations** rather than the benchmark's own.
 Say both — a reader will otherwise assume one grader covers everything.
@@ -134,7 +137,9 @@ Say both — a reader will otherwise assume one grader covers everything.
 - Define CPC = Σcost ÷ Σsolved, TPC likewise in tokens.
 - **Report bootstrapped 95% intervals.** CPC is a ratio estimator, therefore
   biased, and normally reported bare.
-- Report the denominator with every figure.
+- Report the denominator with every figure — and note that the paired set
+  equalises the *effort arms* per row, **not** the problem set across rows, so
+  the cheapest-vs-dearest ratio is not like-for-like (see edit 11).
 - State that resampling is over **problems, not calls** — two calls on one
   problem are not independent.
 - Say what the intervals revealed: **five adjacent config pairs overlap**, so
@@ -172,11 +177,140 @@ Say both — a reader will otherwise assume one grader covers everything.
 - **Thinking more than doubles the pass rate on hard problems: 24.9% → 54.2%**
   (n=462/118); on medium 53.3% → 76.4%. On easy benchmarks it buys almost
   nothing. *The value of reasoning is conditional on difficulty.*
-- **Cost per correct answer spans 305×**, $0.00021 to $0.06320.
+- **Cost per correct answer spans 305×**, $0.00021 to $0.06320 — but report the
+  denominator with it: those two rows rest on n=107 and n=22 *different*
+  problems. On the 22 they share the ratio is **228×**, and across the six
+  configurations that sat the identical 60-problem exam the spread is **65×**.
+  Quote whichever you can name the denominator for; all three are large.
 - **The cheap model with thinking dominates the frontier model with thinking**:
-  `flash|high` at 98.3% costs one sixth of `pro|high` at 95.0%. (Intervals
-  overlap; report as suggestive.)
-- **~15% of all spend bought calls that returned nothing.**
+  `flash|high` at 98.3% costs one sixth of `pro|high` at 95.0% on the frontier
+  set — and on the **68 problems the two actually share they tie exactly, 64/68
+  each**. Report the tie, not the 3-point gap: it is the stronger claim and it
+  does not depend on overlapping intervals.
+- **~15% of spend on reasoning-enabled calls bought nothing** ($0.56 of $3.62;
+  11% of the $5.24 total). Report the denominator — $0.56/$5.24 is 11%, and an
+  examiner will divide.
+
+## 9b. 🔴 NEW — withdraw the "features of the incoming prompt" claim
+
+**Found 2026-09-01, and it is independent of the router's failure.** The three
+features are `difficulty tier`, `n_tests` and `prompt_chars`. Only the last is
+computable from an arriving prompt:
+
+- **`difficulty`** is LiveCodeBench's *own* hardness label — benchmark metadata.
+  For HumanEval+/MBPP+ it degrades to the benchmark name.
+- **`n_tests`** is base + plus: **the size of the hidden grading suite**, not
+  knowable until the problem has been graded.
+
+So the proposal's §5.2 positioning — routing on "cheap, non-LLM structural and
+lexical features" of the incoming prompt — describes something that was not
+built. Withdraw it, and say instead:
+
+> The router is evaluated on three problem-level features, two of which are
+> benchmark metadata rather than properties of an arriving prompt. A deployable
+> version has prompt length plus whatever the prompt text yields — keyword
+> presence, structure, signature count — and that was not measured here.
+
+Also qualify the decomposition wherever it appears: **"feature insufficiency
+0.0"** means *these* features suffice, and two thirds of them are labels a
+deployment would not have. The oracle, hull and 13.8-point headroom are
+unaffected — none of them uses these features.
+
+## 10b. 🔴 NEW — do not claim the costs are billed figures
+
+**Found 2026-09-01.** `cost_actual_usd` is populated on **139 of 1,373 rows, all
+of them the 2026-07-25 pilot**. The 1,224-call grid was never reconciled, so
+every dollar in the results chapter is `cost_computed_usd` — token counts times
+the price table.
+
+**Write it as:** *costs are measured token counts priced at the pinned
+endpoint's contracted rate; the pilot's 139 calls were additionally reconciled
+against `GET /generation`, where billed cost ran 1.354× computed under
+pre-pinning routing.*
+
+Do **not** write "every call priced from the actual bill". It is checkable in
+one query and it is false.
+
+**Best fix, and it is free:** run `runner.reconcile_costs()` over the 1,207 grid
+rows that still carry an `openrouter_gen_id`. If OpenRouter has expired records
+that old, report *that* — an unverifiable cost basis stated plainly is worth
+more than an unexamined one.
+
+## 11a. 🔴 NEW — the headline is per MODEL, not per tier. Lead with this.
+
+**Found 2026-09-01. It reverses a sign, and it is free — a re-analysis of rows
+already bought.** This is the single largest change owed to the results chapter.
+
+The aggregate "thinking helps on hard problems, +29.3" averages over models that
+respond in opposite directions:
+
+| tier | model | off | high | delta | censored |
+|---|---|---|---|---|---|
+| hard | `deepseek-v4-flash` | 29.2% (154) | **82.1%** (28) | **+52.9** | 11% |
+| hard | `qwen3.6-35b-a3b` | 22.1% (154) | 27.6% (29) | +5.5 | 17% |
+| hard | `qwen3.5-9b` | 22.1% (145) | **3.8%** (26) | **-18.2** | **81%** |
+| medium | `deepseek-v4-flash` | 62.5% (104) | 94.4% (36) | +31.9 | 0% |
+| medium | `qwen3.6-35b-a3b` | 52.9% (104) | 72.2% (36) | +19.3 | 6% |
+| medium | `qwen3.5-9b` | 43.6% (101) | 38.7% (31) | -4.9 | 52% |
+| MBPP+ | `qwen3.5-9b` | 80.0% (20) | **55.6%** (18) | **-24.4** | **0%** |
+| HumanEval+ | `qwen3.5-9b` | 90.5% (21) | 94.7% (19) | +4.3 | 0% |
+
+**What to write:**
+
+- Replace the tier-level headline with **"the value of reasoning is a property
+  of the (model, difficulty) pair"**, and give this table.
+- Separate the two failure modes, because they need different sentences:
+  - **Non-termination** - `qwen3.5-9b|high` censors **81%** of hard calls and
+    returns no code on 77%, mean 24,826 reasoning tokens. Its negative delta is
+    mostly the model failing to stop, and partly our ceiling: `flash|high`
+    censors 11% on the same problems.
+  - **Genuine degradation** - on MBPP+ the same model censors **0%**, reasons
+    368 tokens, terminates, and still loses 24 points on the **same 20
+    problems**, every failure producing extracted code that failed on
+    assertions. Overthinking observed directly with truncation ruled out, and a
+    cleaner result than anything currently in the chapter.
+- Note the easy-benchmark rows are also **model-confounded**: the `high` arm is
+  62% `qwen3.5-9b` on MBPP+ and 58% on HumanEval+, against ~25% each in `off`.
+  So "MBPP+ 72.3% -> 73.3%" compares a four-model average with a
+  mostly-one-model average. Drop it for the per-model rows.
+
+Reproduce: `scripts/results.py`, section **THE EFFECT IS PER MODEL**.
+
+## 11b. NEW - report the style confound, and use the matched figures
+
+**Found 2026-09-01, after the course was written. It changes a headline number,
+and it is free to fix — a re-analysis of rows already bought.**
+
+LiveCodeBench ships two execution styles, and the effort arms did not sit the
+same exam. On the hard tier the `off` arm is **348 stdin / 114 functional**; the
+`high` arm is **8 / 110**.
+
+**The cause is mechanical.** `runner.plan` sorts cells by
+`(expected_usd, problem_id)`. Ties inside one configuration break on the problem
+id *as a string*, LeetCode ids are numeric and AtCoder ids start with letters,
+so all 125 functional problems ran before any of the 217 stdin ones — and the
+expensive thinking arm hit the cost cap inside that prefix.
+
+**What to write instead:**
+
+| tier | style | off | on | matched | raw |
+|---|---|---|---|---|---|
+| hard | functional | 31.6% (n=114) | **57.3%** (n=110) | **+25.7** | +29.3 |
+| medium | functional | 49.1% (n=163) | **78.0%** (n=141) | **+28.9** | +23.0 |
+
+- Replace *"more than doubles"* on the hard tier with **"raises the pass rate by
+  a factor of 1.8, from 31.6% to 57.3% on function-style problems"**.
+- Say explicitly that **nothing is claimed about stdin-style problems**: the
+  thinking arm there is n=8.
+- Note that the medium-tier effect is **larger** under matching, not smaller —
+  the raw pair was not uniformly flattering.
+- Label the frontier: those 60 problems are **51 functional / 2 stdin**, and all
+  19 of their hard problems are function-style. So the hull, the oracle, the
+  13.8-point headroom and the router result describe function-style problems.
+- Add it to Limitations, and to the measurement-validity chapter as a second
+  worked example of *the run order is part of the method*.
+
+Reproduce: `scripts/results.py`, section **⚠ STYLE CONFOUND**.
 
 ## 12. ⚠️ LiveCodeBench contamination — every mention must change
 
@@ -187,6 +321,30 @@ release. There is no post-cutoff window.
 Rewrite every citation of LCB-as-contamination-control to LCB-as-difficulty-tier,
 and state the exposure as a limitation, backed by the stored `release_date`
 distribution. This is the edit most likely to be caught by an examiner if left.
+
+## 12b. 🔴 NEW — add a generative-AI declaration to the front matter
+
+**The most dangerous omission in the submission, and the cheapest to fix.**
+
+The repository has **no AI-use declaration anywhere**, while **37 commits carry
+`Co-Authored-By: Claude`** and `CLAUDE.md` is a standing instruction file for an
+AI assistant. An examiner who opens `git log` finds this in ten seconds, and an
+undisclosed-use finding is an academic-integrity matter rather than a
+methodological one.
+
+Disclosed use is normally fine. Undisclosed use is not. **Draft wording is in
+THESIS.md §16** — check it against the department's actual regulations, which
+may require a specific form of words or an appendix of prompts.
+
+Two things the declaration should carry, because they are true and they are what
+an examiner is really asking about:
+
+- **What was verified independently.** Every reported number regenerates from
+  `data/carr.sqlite` via `scripts/results.py` under a fixed seed; the analysis
+  is covered by 132 tests; raw responses are stored so anything can be re-graded
+  without re-purchasing.
+- **What is not verified.** The prior-art claims in §15 rest on search summaries
+  and PDF extraction rather than full reads, and are marked as such.
 
 ## 13. Limitations — write this section properly
 
@@ -200,6 +358,28 @@ distribution. This is the edit most likely to be caught by an examiner if left.
 - One sample per problem at temperature 0; no within-cell variance measured.
 - RQ2 overlaps existing overthinking work (ThoughtTerminator, SelfBudgeter,
   RecurGuard).
+
+## 13b. 🔴 NEW — the abort chapter must report per-model thresholds
+
+**Found 2026-09-01.** The chapter's conclusion, *"no threshold saves money
+without losing a solved problem"*, is a **pooled** statement. Per model:
+
+| model | free threshold | saving | solutions kept |
+|---|---|---|---|
+| **`qwen3.5-9b`** | **10,000** | **88%** | **46/46** |
+| **`qwen3.6-35b-a3b`** | **16,000** | **13%** | **43/43** |
+| `deepseek-v4-flash` | none | | |
+| `deepseek-v4-pro` | none | | |
+| `kimi-k2.6` | none | | |
+
+Write the conclusion as: **whether a reasoning-length abort is free is a
+property of the model.** Where long reasoning rarely succeeds it is free money;
+where it genuinely solves hard problems, every threshold costs solutions. Tie it
+to edit 11a — the free threshold appears exactly for the models whose reasoning
+delta is negative.
+
+Keep the refutation in edit 14 unchanged: the *roster-level* free threshold is
+still false, and the 16k ceiling still manufactured part of the pilot's version.
 
 ## 14. Include the self-refutation — do not quietly drop it
 
@@ -224,7 +404,8 @@ Generated by `uv run python scripts/make_figures.py` into `data/figures/`:
 
 | file | goes in |
 |---|---|
-| `01-effort-by-tier.png` | Results — the headline conditional finding |
+| `01-effort-by-tier.png` | Results — the aggregate conditional finding. **Do not use it alone**; pair it with 05 |
+| `05-effect-by-model.png` | Results — **the real headline**: the per-model effect, with the sign reversal and the truncation share on each bar |
 | `02-reasoning-vs-outcome.png` | Results — long reasoning means failure |
 | `03-frontier-and-hull.png` | The frontier section — hull, oracle, 13.8-point gap |
 | `04-abort-tradeoff.png` | Runtime abort — the curve, with its CI band |

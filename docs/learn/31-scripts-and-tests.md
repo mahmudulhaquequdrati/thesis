@@ -6,7 +6,7 @@
 
 ## In one sentence
 
-> Fourteen scripts are the interface to the library, and 119 tests are the reason
+> Fourteen scripts are the interface to the library, and 132 tests are the reason
 > you can believe the numbers they print.
 
 ---
@@ -18,7 +18,7 @@
 | Script | What it does |
 |---|---|
 | **`results.py`** | **Prints the entire thesis.** Every RQ, every number, every interval |
-| `make_figures.py` | Four PNGs into `data/figures/` |
+| `make_figures.py` | Five PNGs into `data/figures/` |
 | `view.py` | Terminal view of one problem across every configuration |
 | `studio.py` | Browser database explorer with a read-only SQL console |
 | `grade.py` | Re-grade generations. Free — the generations are already bought |
@@ -70,7 +70,7 @@ still held 542.
 
 ---
 
-## The tests — 119, and what each group buys
+## The tests — 132, and what each group buys
 
 | File | Tests | What it makes impossible |
 |---|---|---|
@@ -154,7 +154,7 @@ submit, and say in Chapter 3 that it holds.**
 
 ```bash
 cd ~/thesis
-uv run pytest -q          # expect 119 passed
+uv run pytest -q          # expect 132 passed
 ```
 
 **2. Read the test names as a list of hazards.**
@@ -209,7 +209,7 @@ essentially be turning its output into prose.
 <details>
 <summary>Answers</summary>
 
-1. The cost cap (16 tests) and never paying twice (13). Correct because the
+1. The cost cap (19 tests on that loop) and never paying twice (13). Correct because the
    central risks were spending real money and losing an irreproducible dataset.
 2. It tests the **grader** — the measuring instrument — by running known-correct
    solutions through it. It says nothing about any model's ability; a failure

@@ -92,7 +92,7 @@ release dates.
 | 8 | CPC and TPC **with intervals** | Ratio estimator; resample problems; 5 adjacent pairs overlap |
 | 9 | Rewrite the router section as a **negative result** | Oracle 98.3% at $0.00111; hull 84.5%; headroom 13.8; router +0.0; 0.0 / 33.3 decomposition |
 | 10 | Three **risks are now results** | Saturation confirmed (141 of 320); routing collapse confirmed; budget held at $5.24 of $15 under a $6 cap |
-| 11 | **Add the results** — there were none before | 24.9% → 54.2%; 305× CPC; the dominated frontier model; ~15% waste |
+| 11 | **Add the results** — there were none before | 24.9% → 54.2%; 305× CPC; the dominated frontier model; ~15% waste on the reasoning arm |
 | 13 | Write **Limitations** properly | 26.3% censoring; binary effort axis; single sample; overlap with prior overthinking work |
 | 14 | **Include the self-refutation** | 56 calls above 10,000 tokens succeeded; 88% [82,92] for 49% [35,61] |
 

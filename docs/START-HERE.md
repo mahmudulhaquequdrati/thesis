@@ -24,7 +24,7 @@ that call from the text you can see and you understate it about twentyfold.
 
 ```bash
 uv sync                    # Python 3.12 environment
-uv run pytest -q           # expect: 119 passed
+uv run pytest -q           # expect: 132 passed
 ```
 
 If the tests pass, everything below will work.
@@ -136,7 +136,7 @@ Roughly 2,000 lines. Read it in dependency order and each file explains itself.
 | `carr/stats.py` | Seeded bootstrap, stdlib only. The statistic takes the **whole resample** — required for ratios like cost-per-correct |
 | `carr/analysis.py` | Every number in the thesis. Note `paired_problems()`: only 107 problems are comparable |
 | `carr/router.py` | The router and the gap decomposition |
-| `carr/figures.py` | Four PNGs |
+| `carr/figures.py` | Five PNGs |
 
 ---
 
