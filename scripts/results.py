@@ -199,7 +199,7 @@ def main() -> None:
         if overlaps:
             print(f"\n  {len(overlaps)} adjacent pair(s) have OVERLAPPING intervals "
                   f"-- their order is not established:")
-            for a, b in overlaps[:4]:
+            for a, b in overlaps:
                 print(f"    {a['model_slug']}|{a['effort_label']} vs "
                       f"{b['model_slug']}|{b['effort_label']}")
 

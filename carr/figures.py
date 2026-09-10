@@ -1,11 +1,15 @@
 """Figures for the write-up. Free -- reads the database, writes PNGs.
 
-Four figures, one per claim the thesis actually makes:
+Eight figures, one per claim the thesis actually makes:
 
-  fig_effort_by_tier   when thinking helps, and where it does not
+  fig_effort_by_tier     when thinking helps, and where it does not
+  fig_effect_by_model    the effect is per model, and it changes sign
   fig_reasoning_outcome  long reasoning means failure, not effort
-  fig_frontier         the cost-accuracy hull, the oracle, and the gap
-  fig_abort_curve      the honest tradeoff, with its uncertainty band
+  fig_frontier           the cost-accuracy hull, the oracle, and the gap
+  fig_abort_curve        the honest tradeoff, with its uncertainty band
+  fig_cpc                cost per correct answer with intervals
+  fig_coverage           the unbalanced grid, shown before any result
+  fig_reasoning_by_tier  reasoning length tracks difficulty
 
 Design rules, because these end up in a document and get printed:
 
@@ -300,13 +304,136 @@ def fig_effect_by_model(conn) -> Path:
     _style(ax)
     return _save(fig, "05-effect-by-model")
 
+
+# ------------------------------------------------------------------ figure 6
+
+
+def fig_cpc(conn, seed: int = 0) -> Path:
+    """Cost per correct answer per config, with its bootstrap interval.
+
+    Over the paired problem set, because a CPC computed over each config's own
+    problems compares models on different exams. Log x-axis: the spread is
+    orders of magnitude, and a linear axis would flatten every cheap config
+    into one bar at the left edge. `n` is printed per bar because coverage
+    inside the paired set still varies (16-107 problems).
+    """
+    rows = [r for r in analysis.cost_per_correct(conn, seed=seed, n_resamples=2000)
+            if r["cpc_usd"] is not None]
+    if not rows:
+        raise RuntimeError("no CPC rows to draw")
+    rows = rows[::-1]                      # cheapest at the top of the chart
+
+    fig, ax = plt.subplots(figsize=(7.4, 4.6))
+    labels = [f"{r['model_slug'].split('/')[-1]}|{r['effort_label']}" for r in rows]
+    x = [r["cpc_usd"] for r in rows]
+    lo = [r["cpc_usd"] - r["cpc_lo"] if r["cpc_lo"] == r["cpc_lo"] else 0 for r in rows]
+    hi = [r["cpc_hi"] - r["cpc_usd"] if r["cpc_hi"] == r["cpc_hi"] else 0 for r in rows]
+    colors = [HIGH_C if r["effort_label"] != "off" else OFF_C for r in rows]
+    ax.barh(labels, x, xerr=[lo, hi], color=colors, edgecolor=INK, linewidth=0.6,
+            height=0.6, ecolor="#666", capsize=3)
+    for i, r in enumerate(rows):
+        ax.text(r["cpc_hi"] * 1.15 if r["cpc_hi"] == r["cpc_hi"] else r["cpc_usd"] * 1.15,
+                i, f"${r['cpc_usd']:.5f}   n={r['n_problems']}, solved {r['solved']}",
+                va="center", fontsize=7.5, color=INK)
+    ax.set_xscale("log")
+    ax.set_xlim(min(x) * 0.5, max(x) * 12)
+    ax.set_xlabel("cost per correct answer (USD, log scale; bars are 95% CI)", fontsize=9)
+    ax.set_title("Cost per correct answer spans orders of magnitude "
+                 "(dark = reasoning on, light = off)", fontsize=10.5, color=INK, pad=12)
+    _style(ax)
+    return _save(fig, "06-cost-per-correct")
+
+
+# ------------------------------------------------------------------ figure 7
+
+
+def fig_coverage(conn) -> Path:
+    """How many problems each config actually ran. The grid's imbalance.
+
+    Drawn so the reader can see, before any result, that the cheap `off` arm
+    is complete and the expensive arms are not -- the run was cheapest-first
+    and stopped at the cost cap. Every comparison in the thesis is restricted
+    to shared problems because of this picture.
+    """
+    rows = conn.execute("""
+        SELECT c.model_slug, c.effort_label, c.price_out_per_m,
+               COUNT(DISTINCT g.problem_id) AS n
+        FROM generations g JOIN configs c ON c.config_id = g.config_id
+        WHERE COALESCE(g.is_mock, 0) = 0
+        GROUP BY c.config_id ORDER BY c.price_out_per_m, c.effort_label
+    """).fetchall()
+    if not rows:
+        raise RuntimeError("no generations to draw coverage from")
+    total = conn.execute(
+        "SELECT COUNT(DISTINCT problem_id) FROM generations").fetchone()[0]
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    labels = [f"{r['model_slug'].split('/')[-1]}|{r['effort_label']}" for r in rows]
+    ns = [r["n"] for r in rows]
+    colors = [HIGH_C if r["effort_label"] != "off" else OFF_C for r in rows]
+    ax.barh(labels, ns, color=colors, edgecolor=INK, linewidth=0.6, height=0.6)
+    ax.axvline(total, color=ACCENT, lw=1, ls="--")
+    ax.text(total, -0.9, f"{total} problems in the run set", fontsize=7.5,
+            color=ACCENT, ha="right", va="top")
+    for i, n in enumerate(ns):
+        ax.text(n + total * 0.01, i, str(n), va="center", fontsize=8, color=INK)
+    ax.invert_yaxis()
+    ax.set_xlim(0, total * 1.12)
+    ax.set_xlabel("problems with at least one generation", fontsize=9)
+    ax.set_title("Coverage per configuration: cheapest-first, stopped at the cap",
+                 fontsize=10.5, color=INK, pad=12)
+    _style(ax)
+    return _save(fig, "07-coverage")
+
+
+# ------------------------------------------------------------------ figure 8
+
+
+def fig_reasoning_by_tier(conn) -> Path:
+    """Mean reasoning tokens per tier, easy to hard, with min-max whiskers.
+
+    The monotone rise is a validity check: the models' internal effort tracks a
+    difficulty label they never saw.
+    """
+    order = ["mbpp_plus", "humaneval_plus", "easy", "medium", "hard"]
+    label = {"mbpp_plus": "MBPP+", "humaneval_plus": "HumanEval+",
+             "easy": "LCB easy", "medium": "LCB medium", "hard": "LCB hard"}
+    rows = {r["tier"]: r for r in analysis.reasoning_by_tier(conn)}
+    tiers = [t for t in order if t in rows]
+    if not tiers:
+        raise RuntimeError("no reasoning rows to draw")
+
+    fig, ax = plt.subplots(figsize=(7.0, 4.0))
+    means = [rows[t]["avg_reasoning"] or 0 for t in tiers]
+    mins = [rows[t]["min_reasoning"] or 0 for t in tiers]
+    maxs = [rows[t]["max_reasoning"] or 0 for t in tiers]
+    ax.bar([label[t] for t in tiers], means, color=HIGH_C, edgecolor=INK,
+           linewidth=0.6, width=0.55)
+    ax.errorbar(range(len(tiers)), means,
+                yerr=[[m - lo for m, lo in zip(means, mins)],
+                      [hi - m for m, hi in zip(means, maxs)]],
+                fmt="none", ecolor="#999", capsize=3, lw=0.8)
+    for i, t in enumerate(tiers):
+        ax.text(i, means[i] + max(maxs) * 0.02, f"{means[i]:,.0f}\n(n={rows[t]['n']})",
+                ha="center", va="bottom", fontsize=8, color=INK)
+    ax.set_ylabel("mean reasoning tokens per call", fontsize=9)
+    ax.set_ylim(0, max(maxs) * 1.12)
+    ax.set_title("Reasoning length rises with difficulty (whiskers: min to max)",
+                 fontsize=10.5, color=INK, pad=12)
+    _style(ax)
+    return _save(fig, "08-reasoning-by-tier")
+
+
 def make_all(conn, seed: int = 0) -> list[Path]:
     out = []
     for fn in (lambda c: fig_effort_by_tier(c),
                lambda c: fig_effect_by_model(c),
                lambda c: fig_reasoning_outcome(c),
                lambda c: fig_frontier(c, seed=seed),
-               lambda c: fig_abort_curve(c, seed=seed)):
+               lambda c: fig_abort_curve(c, seed=seed),
+               lambda c: fig_cpc(c, seed=seed),
+               lambda c: fig_coverage(c),
+               lambda c: fig_reasoning_by_tier(c)):
         try:
             out.append(fn(conn))
         except Exception as exc:                       # noqa: BLE001
